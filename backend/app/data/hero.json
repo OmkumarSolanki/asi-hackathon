@@ -1,0 +1,100 @@
+{
+  "hero": {
+    "sid": "2025-07-14T22:35:00Z",
+    "score": 370.91,
+    "n_flights": 14712,
+    "hazard_frac": 0.0013,
+    "peak_refc": 283.2,
+    "affected_flights": 114
+  },
+  "ranking": [
+    {
+      "sid": "2025-07-14T22:35:00Z",
+      "score": 370.91,
+      "n_flights": 14712,
+      "hazard_frac": 0.0013,
+      "peak_refc": 283.2,
+      "affected_flights": 114
+    },
+    {
+      "sid": "2025-07-08T22:00:00Z",
+      "score": 345.83,
+      "n_flights": 14726,
+      "hazard_frac": 0.0017,
+      "peak_refc": 484.3,
+      "affected_flights": 51
+    },
+    {
+      "sid": "2025-05-29T21:00:00Z",
+      "score": 277.59,
+      "n_flights": 16687,
+      "hazard_frac": 0.0012,
+      "peak_refc": 436.7,
+      "affected_flights": 29
+    },
+    {
+      "sid": "2025-06-10T17:00:00Z",
+      "score": 275.94,
+      "n_flights": 17074,
+      "hazard_frac": 0.0017,
+      "peak_refc": 444.4,
+      "affected_flights": 26
+    },
+    {
+      "sid": "2025-08-22T18:00:00Z",
+      "score": 265.56,
+      "n_flights": 16143,
+      "hazard_frac": 0.0014,
+      "peak_refc": 404.3,
+      "affected_flights": 31
+    },
+    {
+      "sid": "2025-07-01T21:30:00Z",
+      "score": 252.73,
+      "n_flights": 13946,
+      "hazard_frac": 0.0017,
+      "peak_refc": 318.0,
+      "affected_flights": 46
+    },
+    {
+      "sid": "2025-08-13T18:00:00Z",
+      "score": 218.74,
+      "n_flights": 15183,
+      "hazard_frac": 0.0013,
+      "peak_refc": 371.0,
+      "affected_flights": 16
+    },
+    {
+      "sid": "2025-08-21T18:00:00Z",
+      "score": 193.14,
+      "n_flights": 17880,
+      "hazard_frac": 0.0013,
+      "peak_refc": 247.7,
+      "affected_flights": 34
+    },
+    {
+      "sid": "2026-03-04T18:00:00Z",
+      "score": 124.29,
+      "n_flights": 16695,
+      "hazard_frac": 0.0002,
+      "peak_refc": 228.1,
+      "affected_flights": 5
+    },
+    {
+      "sid": "2026-04-08T18:00:00Z",
+      "score": 47.55,
+      "n_flights": 16722,
+      "hazard_frac": 0.0,
+      "peak_refc": 87.0,
+      "affected_flights": 2
+    },
+    {
+      "sid": "2026-01-13T18:00:00Z",
+      "score": 19.31,
+      "n_flights": 14549,
+      "hazard_frac": 0.0,
+      "peak_refc": 38.6,
+      "affected_flights": 0
+    }
+  ]
+}
