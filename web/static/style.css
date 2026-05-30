@@ -19,6 +19,8 @@
 html,body{height:100%;background:var(--bg);color:var(--txt);
   font-family:var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased}
 #map{position:fixed;inset:0;width:100vw;height:100vh;display:block}
+.fx-canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block;
+  pointer-events:none;mix-blend-mode:screen;z-index:1}
 
 .hidden{display:none!important}
 .card,.legend,#panel,#controls .ctl,.sigmet{
@@ -203,8 +205,16 @@ html,body{height:100%;background:var(--bg);color:var(--txt);
 .lg-status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
 .lg-status .dot{width:7px;height:7px;border-radius:50%;background:var(--green);
   box-shadow:0 0 6px var(--green);display:inline-block}
-.wdot{width:8px;height:8px;border-radius:50%;display:inline-block;margin:0 1px}
-.wdot.calm{background:#50d2aa} .wdot.mod{background:#f0b95a} .wdot.strong{background:#ff7878}
+.wdot{width:9px;height:9px;border-radius:50%;display:inline-block;margin:0 2px;
+  box-shadow:0 0 6px rgba(255,255,255,.08)}
+.wdot.calm{background:#00e37a;box-shadow:0 0 6px rgba(0,227,122,.55)}
+.wdot.mod{background:#ffb800;box-shadow:0 0 6px rgba(255,184,0,.55)}
+.wdot.strong{background:#ff4632;box-shadow:0 0 8px rgba(255,70,50,.75)}
+.sdot{width:10px;height:10px;border-radius:2px;display:inline-block;margin:0 1px;
+  border:1px solid rgba(255,255,255,.18)}
+.sdot.low{background:rgba(0,212,255,.45)}
+.sdot.mid{background:rgba(255,184,0,.65)}
+.sdot.high{background:rgba(255,59,48,.75)}
 #lgWind small{color:var(--muted2);font-size:9px}
 
 /* ---------- Wind toggle ---------- */

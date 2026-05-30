@@ -5,6 +5,8 @@ let pendingTime = Q.get("time");          // optional deep-link start time
 let pendingSuggest = Q.get("suggest") === "1";
 const canvas = document.getElementById("map");
 const ctx = canvas.getContext("2d");
+const fxCanvas = document.getElementById("windFx");
+const fxCtx = fxCanvas ? fxCanvas.getContext("2d", { alpha: true }) : null;
 const MONO = "ui-monospace,Menlo,Consolas,monospace";
 const SANS = "-apple-system,Segoe UI,Roboto,sans-serif";
 
@@ -27,8 +29,22 @@ const S = {
   dpr: 1,
   advisory: null,    // /api/advisory (brief + crowd + analogs + landing)
   winds: null,       // /api/winds station vectors
-  windsOn: false,    // surface-wind layer toggle
+  windsOn: false,    // wind streamlines toggle
+  sectors: null,     // /api/sectors HIGH-band polygons
+  sectorsOn: false,  // sector polygons layer toggle
 };
+
+// ------------- wind streamlines (animated overlay canvas) -------------
+const WIND_FX = {
+  particles: [],
+  field: null,
+  raf: null,
+  lastView: null,
+};
+const PARTICLES_N = 1800;
+const TRAIL_FADE = 0.965;
+const SPEED_SCALE = 0.016;
+const PARTICLE_LIFE = 140;
 
 // ------------- geometry (client-side plane interpolation) -------------
 function hav(lat1, lon1, lat2, lon2) {
@@ -118,6 +134,17 @@ function resize() {
   canvas.height = innerHeight * S.dpr;
   canvas.style.width = innerWidth + "px";
   canvas.style.height = innerHeight + "px";
+  if (fxCanvas) {
+    fxCanvas.width = canvas.width;
+    fxCanvas.height = canvas.height;
+    fxCanvas.style.width = innerWidth + "px";
+    fxCanvas.style.height = innerHeight + "px";
+    if (fxCtx) {
+      fxCtx.setTransform(1, 0, 0, 1, 0, 0);
+      fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+    }
+    if (S.windsOn) restartParticles();
+  }
   draw();
 }
 
@@ -164,62 +191,159 @@ function routeGlow(r) {
   return "#7fa8d8";
 }
 
-// Surface-wind vectors: an arrow per station pointing the way the wind blows
-// (wind_dir_deg is the direction it comes FROM, so we add 180°). Green under
-// 40 kt, red at/above. Length scales with speed.
-function windColor(spd) {
-  return spd >= 40 ? "rgba(255,120,120,.9)"
-       : spd >= 25 ? "rgba(240,185,90,.85)"
-       : "rgba(80,210,170,.82)";
-}
-function windArrow(x, y, to, len, col) {
-  const ex = x + Math.sin(to) * len, ey = y - Math.cos(to) * len;   // 0°=N(up): dx=sin, dy=-cos
-  ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1.3 * S.dpr;
-  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.stroke();
-  const a1 = to + Math.PI * 0.82, a2 = to - Math.PI * 0.82, h = 4 * S.dpr;
-  ctx.beginPath(); ctx.moveTo(ex, ey);
-  ctx.lineTo(ex + Math.sin(a1) * h, ey - Math.cos(a1) * h);
-  ctx.lineTo(ex + Math.sin(a2) * h, ey - Math.cos(a2) * h);
-  ctx.closePath(); ctx.fill();
-}
-// Dense wind field: the ~36 station obs are interpolated (inverse-distance) onto
-// a regular screen grid, so there's an arrow roughly everywhere — easy to read
-// the wind ahead on a route, not just at airports.
-function drawWinds() {
-  if (!S.winds || !S.winds.stations) return;
-  const dpr = S.dpr, W = canvas.width, H = canvas.height;
-  // Station vectors as (u=east, v=north) of the direction the wind travels TO.
-  const st = S.winds.stations.map(s => {
-    const to = (s.wind_dir_deg + 180) * Math.PI / 180;
-    return { lat: s.lat, lon: s.lon, u: s.wind_kt * Math.sin(to), v: s.wind_kt * Math.cos(to) };
+// Wind field: climatological westerly base blended with IDW from METAR stations.
+// Returns (lat, lon) -> {u: kt east, v: kt north, kt: speed}.
+function makeWindField(stations) {
+  const pts = stations.map(s => {
+    const rad = ((s.wind_dir_deg + 180) * Math.PI) / 180;
+    return {
+      lat: s.lat, lon: s.lon,
+      u: s.wind_kt * Math.sin(rad), v: s.wind_kt * Math.cos(rad),
+      isReal: s.source === "metar",
+    };
   });
-  const step = 58 * dpr;                          // grid spacing (device px)
-  for (let py = step * 0.5; py < H; py += step) {
-    for (let px = step * 0.5; px < W; px += step) {
-      const [lat, lon] = unproj(px, py);
-      if (lat < 21.9 || lat > 55.8 || lon < -135 || lon > -67.5) continue;   // wx grid bounds
-      let su = 0, sv = 0, sw = 0;                  // inverse-distance (1/d^4) interpolation
-      for (const s of st) {
-        const dla = lat - s.lat, dlo = (lon - s.lon) * Math.cos(lat * Math.PI / 180);
-        const d2 = dla * dla + dlo * dlo + 0.05;
-        const wgt = 1 / (d2 * d2);
-        su += s.u * wgt; sv += s.v * wgt; sw += wgt;
-      }
-      if (sw <= 0) continue;
-      const u = su / sw, v = sv / sw, spd = Math.hypot(u, v);
-      if (spd < 0.5) continue;
-      const len = (6 + Math.min(18, spd * 0.5)) * dpr;
-      windArrow(px, py, Math.atan2(u, v), len, windColor(spd));
+  return (lat, lon) => {
+    const baseDirDeg = 270 + (lat - 38) * 1.5;
+    const baseSpeed = 12 + Math.max(0, (lat - 30) * 0.4);
+    const baseRad = ((baseDirDeg + 180) * Math.PI) / 180;
+    let u = baseSpeed * Math.sin(baseRad);
+    let v = baseSpeed * Math.cos(baseRad);
+    let wsum = 0, uSum = 0, vSum = 0;
+    for (const p of pts) {
+      const dLat = lat - p.lat;
+      const dLon = (lon - p.lon) * Math.cos((lat * Math.PI) / 180);
+      const d2 = dLat * dLat + dLon * dLon;
+      const w = 1 / (d2 + 0.5);
+      wsum += w; uSum += w * p.u; vSum += w * p.v;
+    }
+    if (wsum > 0) {
+      const realityWeight = 0.55;
+      const ux = uSum / wsum, vx = vSum / wsum;
+      u = u * (1 - realityWeight) + ux * realityWeight;
+      v = v * (1 - realityWeight) + vx * realityWeight;
+    }
+    return { u, v, kt: Math.sqrt(u * u + v * v) };
+  };
+}
+function streamColor(kt, alpha) {
+  if (kt >= 40) return `rgba(255, 70, 50, ${Math.min(1, alpha + 0.25)})`;  // DANGER — fully saturated red, brighter
+  if (kt >= 25) return `rgba(255, 184, 0, ${alpha})`;                       // CAUTION — amber
+  return `rgba(0, 227, 122, ${alpha})`;                                     // CALM — green
+}
+function spawnInView(p) {
+  if (!S.view) { p.lat = 38; p.lon = -98; p.age = 0; return; }
+  const [w, e, s, n] = S.view;
+  p.lat = s + Math.random() * (n - s);
+  p.lon = w + Math.random() * (e - w);
+  p.age = Math.random() * PARTICLE_LIFE * 0.5;
+}
+function restartParticles() {
+  if (!S.view) return;
+  WIND_FX.particles = new Array(PARTICLES_N).fill(0).map(() => {
+    const p = { lat: 0, lon: 0, age: 0 };
+    spawnInView(p);
+    return p;
+  });
+  WIND_FX.lastView = S.view.slice();
+  if (fxCtx) fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+}
+function windFxTick() {
+  if (!S.windsOn || !fxCtx || !S.view || !WIND_FX.field) {
+    WIND_FX.raf = null;
+    return;
+  }
+  if (WIND_FX.lastView) {
+    const a = WIND_FX.lastView, b = S.view;
+    if (a[0] !== b[0] || a[1] !== b[1] || a[2] !== b[2] || a[3] !== b[3]) {
+      restartParticles();
     }
   }
-  // faint dots at the real observation sites (brighter for live METAR)
-  const [w, e, sLat, n] = S.view;
-  for (const s of S.winds.stations) {
-    if (s.lon < w || s.lon > e || s.lat < sLat || s.lat > n) continue;
-    const [x, y] = proj(s.lat, s.lon);
-    ctx.fillStyle = s.source === "metar" ? "rgba(120,220,255,.8)" : "rgba(150,170,190,.4)";
-    ctx.beginPath(); ctx.arc(x, y, 1.8 * dpr, 0, 7); ctx.fill();
+  const W = fxCanvas.width, H = fxCanvas.height, dpr = S.dpr;
+  fxCtx.globalCompositeOperation = "destination-in";
+  fxCtx.fillStyle = `rgba(0,0,0,${TRAIL_FADE})`;
+  fxCtx.fillRect(0, 0, W, H);
+  fxCtx.globalCompositeOperation = "source-over";
+  const [vw, ve, vs, vn] = S.view;
+  const field = WIND_FX.field;
+  for (const p of WIND_FX.particles) {
+    const { u, v, kt } = field(p.lat, p.lon);
+    const [prevX, prevY] = proj(p.lat, p.lon);
+    const dLat = v * SPEED_SCALE * 0.05;
+    const dLon = u * SPEED_SCALE * 0.05 / Math.max(Math.cos((p.lat * Math.PI) / 180), 0.3);
+    p.lat += dLat;
+    p.lon += dLon;
+    p.age += 1;
+    if (p.age > PARTICLE_LIFE ||
+        p.lat < vs - 1 || p.lat > vn + 1 ||
+        p.lon < vw - 1 || p.lon > ve + 1) {
+      spawnInView(p);
+      continue;
+    }
+    const [curX, curY] = proj(p.lat, p.lon);
+    const alpha = Math.min(1, kt / 30) * 0.7 + 0.25;
+    fxCtx.strokeStyle = streamColor(kt, alpha);
+    fxCtx.lineWidth = 1.1 * dpr;
+    fxCtx.beginPath();
+    fxCtx.moveTo(prevX, prevY);
+    fxCtx.lineTo(curX, curY);
+    fxCtx.stroke();
   }
+  WIND_FX.raf = requestAnimationFrame(windFxTick);
+}
+function startWindFx() {
+  if (!fxCtx || !S.winds || !S.winds.stations) return;
+  WIND_FX.field = makeWindField(S.winds.stations);
+  restartParticles();
+  if (WIND_FX.raf == null) WIND_FX.raf = requestAnimationFrame(windFxTick);
+}
+function stopWindFx() {
+  if (WIND_FX.raf != null) cancelAnimationFrame(WIND_FX.raf);
+  WIND_FX.raf = null;
+  if (fxCtx) fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+}
+
+// Sector polygons: full HIGH-band airspace with load/capacity color ramp.
+function sectorFillColor(pct) {
+  if (pct >= 0.9) return "rgba(255, 59, 48, 0.55)";
+  if (pct >= 0.6) return "rgba(255, 184, 0, 0.42)";
+  if (pct >= 0.3) return "rgba(0, 212, 255, 0.22)";
+  return "rgba(0, 212, 255, 0.10)";
+}
+function sectorStrokeColor(pct) {
+  if (pct >= 0.9) return "rgba(255, 59, 48, 0.95)";
+  if (pct >= 0.6) return "rgba(255, 184, 0, 0.9)";
+  return "rgba(0, 212, 255, 0.7)";
+}
+function drawSectors() {
+  if (!S.sectors || !S.sectors.length) return;
+  const dpr = S.dpr;
+  for (const sec of S.sectors) {
+    if (!sec.ring || sec.ring.length < 3) continue;
+    ctx.beginPath();
+    sec.ring.forEach((c, i) => {
+      const [x, y] = proj(c[0], c[1]);
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = sectorFillColor(sec.load_pct);
+    ctx.fill();
+    ctx.strokeStyle = sectorStrokeColor(sec.load_pct);
+    ctx.lineWidth = (sec.load_pct >= 0.6 ? 1.6 : 1.1) * dpr;
+    ctx.stroke();
+  }
+  ctx.textAlign = "center";
+  ctx.font = `${10 * dpr}px ${MONO}`;
+  for (const sec of S.sectors) {
+    if (sec.load_pct < 0.4) continue;
+    const c = centroid(sec.ring), [cx, cy] = proj(c[0], c[1]);
+    ctx.fillStyle = "rgba(242,245,249,.92)";
+    ctx.shadowColor = "rgba(7,10,16,.9)";
+    ctx.shadowBlur = 3 * dpr;
+    ctx.fillText(sec.name, cx, cy);
+    ctx.fillText(`${sec.load}/${sec.cap}`, cx, cy + 12 * dpr);
+    ctx.shadowBlur = 0;
+  }
+  ctx.textAlign = "left";
 }
 
 function draw() {
@@ -269,8 +393,8 @@ function draw() {
     ctx.fillText(c.n.toUpperCase(), x + 6 * dpr, y + 3.5 * dpr);
   }
 
-  // surface winds (toggleable layer)
-  if (S.windsOn) drawWinds();
+  // sector polygons (toggleable layer) — rendered before traffic/plane so they sit underneath
+  if (S.sectorsOn) drawSectors();
 
   // traffic
   for (const t of (S.state && S.state.traffic) || []) { const [x, y] = proj(t.lat, t.lon); drawPlane(x, y, 5 * dpr, t.hdg, "rgba(165,190,215,.5)", false); }
@@ -539,7 +663,7 @@ async function loadFlight() {
   const meta = await res.json();
   if (meta.error) { setText("pickerMsg", meta.error); return; }
   S.meta = meta; S.reroutes = null; S.selected = null; S.rerouteFrac = null; S.frac = 0;
-  S.committedPath = null; S.advisory = null; S.winds = null;
+  S.committedPath = null; S.advisory = null; S.winds = null; S.sectors = null;
   $("advisory").classList.add("hidden"); $("landingStrip").classList.add("hidden");
   // Optional deep-link: start at a given time (and optionally auto-suggest).
   if (pendingTime) {
@@ -562,6 +686,8 @@ async function loadFlight() {
   pendingTime = null; pendingSuggest = false;
   loadHotspot();   // background: find congested point + pre-warm reroute cache
   fetchAdvisory(); // background: load the AI advisory once; it then persists
+  if (S.windsOn) fetchWinds().then(() => { if (S.windsOn) startWindFx(); });
+  if (S.sectorsOn) fetchSectors();
 }
 
 let stateSeq = 0;
@@ -658,14 +784,40 @@ async function fetchWinds() {
   try {
     const d = await (await fetch(`/api/winds?date=${S.date}&time=${encodeURIComponent(t)}`)).json();
     if (seq !== windsSeq) return;                  // a newer scrub superseded this
-    if (d && d.stations) { S.winds = d; draw(); }
+    if (d && d.stations) {
+      S.winds = d;
+      if (S.windsOn) { WIND_FX.field = makeWindField(d.stations); }
+    }
   } catch (e) {}
 }
 function toggleWinds() {
   S.windsOn = !S.windsOn;
   $("windBtn").classList.toggle("on", S.windsOn);
   $("lgWind").classList.toggle("hidden", !S.windsOn);
-  if (S.windsOn && !S.winds) fetchWinds(); else draw();
+  if (S.windsOn) {
+    if (!S.winds) fetchWinds().then(() => { if (S.windsOn) startWindFx(); });
+    else startWindFx();
+  } else {
+    stopWindFx();
+  }
+}
+
+let sectorsSeq = 0;
+async function fetchSectors() {
+  if (!S.meta) return;
+  const seq = ++sectorsSeq;
+  const t = timeIso();
+  try {
+    const d = await (await fetch(`/api/sectors?date=${S.date}&time=${encodeURIComponent(t)}&band=high`)).json();
+    if (seq !== sectorsSeq) return;
+    if (d && d.sectors) { S.sectors = d.sectors; draw(); }
+  } catch (e) {}
+}
+function toggleSectors() {
+  S.sectorsOn = !S.sectorsOn;
+  $("sectorBtn").classList.toggle("on", S.sectorsOn);
+  $("lgSect").classList.toggle("hidden", !S.sectorsOn);
+  if (S.sectorsOn && !S.sectors) fetchSectors(); else draw();
 }
 
 // ------------- scrubber -------------
@@ -710,6 +862,7 @@ function throttleLatest(fn) {
 }
 const refreshWeatherLive = throttleLatest(() => fetchWeather().then(draw));
 const refreshWindsLive = throttleLatest(fetchWinds);
+const refreshSectorsLive = throttleLatest(fetchSectors);
 
 let scrubTimer = null;
 function onScrub() {
@@ -722,6 +875,7 @@ function onScrub() {
   refreshTrafficLive();                            // live other-aircraft positions
   refreshWeatherLive();                            // live radar follows the timeline
   if (S.windsOn) refreshWindsLive();               // live wind field follows the timeline
+  if (S.sectorsOn) refreshSectorsLive();           // live sector loads follow the timeline
   clearTimeout(scrubTimer);
   scrubTimer = setTimeout(refreshState, 220);      // heavier sector/readout state on settle
 }
@@ -822,6 +976,7 @@ $("zoomIn").addEventListener("click", () => zoomAt(canvas.width / 2, canvas.heig
 $("zoomOut").addEventListener("click", () => zoomAt(canvas.width / 2, canvas.height / 2, 1.25));
 $("fitBtn").addEventListener("click", () => { if (S.meta) { S.view = fitView(S.meta.extent, canvas.width, canvas.height); draw(); } });
 $("windBtn").addEventListener("click", toggleWinds);
+$("sectorBtn").addEventListener("click", toggleSectors);
 addEventListener("resize", resize);
 
 // ------------- "Don't Crash!" curved caption (per-char, upright smile) -------------

@@ -816,6 +816,46 @@ def api_winds():
     return jsonify(_native(data)), status
 
 
+def sectors_compute(date, time_arg, band):
+    sd = dc.find_snapshot_dir(BUNDLE, date)
+    if sd is None:
+        return {"error": f"no snapshot for date {date!r}"}, 404
+    payload = get_payload(sd)
+    ref = payload["flights"][0] if payload.get("flights") else {}
+    try:
+        t = dc.parse_current_time(time_arg, ref) if time_arg else None
+    except ValueError:
+        t = None
+    if t is None:
+        t = datetime.fromisoformat(payload["asked_at"])
+    secs = sectors()
+    if not secs:
+        return {"sectors": [], "time": _utc(t).isoformat()}, 200
+    loads = dc.compute_sector_loads(payload.get("flights", []), t, secs)
+    band_key = band.upper() if band else "HIGH"
+    bands_iter = (band_key,) if band_key in ("HIGH", "LOW") else ("HIGH", "LOW")
+    out = []
+    for bk in bands_iter:
+        b = secs[bk]
+        for i, nm in enumerate(b["names"]):
+            load = loads[bk].get(nm, 0)
+            cap = b["caps"][i]
+            load_pct = load / max(cap, 1)
+            geom = b["geoms"][i]
+            ring = [[round(y, 3), round(x, 3)] for x, y in geom.exterior.coords]
+            out.append({"name": nm, "band": bk, "load": load, "cap": cap,
+                        "load_pct": round(load_pct, 3), "ring": ring})
+    return {"sectors": out, "time": _utc(t).isoformat()}, 200
+
+
+@app.route("/api/sectors")
+def api_sectors():
+    data, status = sectors_compute(request.args.get("date", ""),
+                                   request.args.get("time", ""),
+                                   request.args.get("band", "high"))
+    return jsonify(_native(data)), status
+
+
 @app.route("/api/advisory")
 def api_advisory():
     data, status = advisory_compute(request.args.get("flight", ""),

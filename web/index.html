@@ -8,6 +8,7 @@
 </head>
 <body>
 <canvas id="map"></canvas>
+<canvas id="windFx" class="fx-canvas"></canvas>
 
 <!-- "Don't Crash!" badge (logo + curved caption) -->
 <div id="logoBadge" title="Don't Crash!">
@@ -58,7 +59,8 @@
   <div class="ctl btn" id="zoomIn">+</div>
   <div class="ctl btn" id="zoomOut">−</div>
   <div class="ctl btn" id="fitBtn" title="Fit route">⤢</div>
-  <div class="ctl btn toggle" id="windBtn" title="Toggle surface winds">WIND</div>
+  <div class="ctl btn toggle" id="windBtn" title="Toggle wind streamlines">WIND</div>
+  <div class="ctl btn toggle" id="sectorBtn" title="Toggle airspace sectors (load %)">SECT</div>
   <div class="ctl readout"><label>NOWCAST</label><span id="nowcast">+0:00</span></div>
   <div class="ctl readout"><label>RADAR ALT</label><span id="radarAlt">—</span></div>
   <div class="ctl readout"><label>TIME</label><span id="ctlTime">—</span></div>
@@ -142,8 +144,13 @@
   <span class="lg-item"><i class="swatch filed"></i>Filed route</span>
   <span class="lg-item"><i class="swatch traffic">✈</i>Traffic</span>
   <span id="lgWind" class="lg-item hidden">Wind
-    <i class="wdot calm"></i><i class="wdot mod"></i><i class="wdot strong"></i>
-    <small>&lt;25·25·40+ kt</small></span>
+    <i class="wdot calm" title="calm <25 kt"></i><small>&lt;25</small>
+    <i class="wdot mod" title="moderate 25–40 kt"></i><small>25–40</small>
+    <i class="wdot strong" title="dangerous 40+ kt"></i><small>40+ kt</small></span>
+  <span id="lgSect" class="lg-item hidden">Sect HIGH&nbsp;<small>cruise &ge; FL350</small>
+    <i class="sdot low"></i><small>&lt;30</small>
+    <i class="sdot mid"></i><small>60</small>
+    <i class="sdot high"></i><small>90%+ load</small></span>
   <span class="lg-status"><i class="dot"></i><span id="statusText">Live · NEXRAD mosaic</span></span>
 </div>
 
