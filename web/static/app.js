@@ -19,9 +19,9 @@ const S = {
   reroutes: null,    // /api/reroutes  (null until "Suggest" pressed)
   selected: null,    // selected reroute index
   rerouteFrac: null, // frac at which reroutes were evaluated (plane follows the
-                     // selected route past this point)
+  // selected route past this point)
   committedPath: null, // actual flown polyline up to rerouteFrac (filed + any
-                       // earlier accepted reroutes); null = filed route
+  // earlier accepted reroutes); null = filed route
   frac: 0,           // scrub position 0..1
   view: null,        // [w,e,s,n]
   wx: null,          // weather Image
@@ -52,7 +52,7 @@ function hav(lat1, lon1, lat2, lon2) {
   const R = 3440.065, r = Math.PI / 180;
   const dphi = (lat2 - lat1) * r, dl = (lon2 - lon1) * r;
   const a = Math.sin(dphi / 2) ** 2 +
-    Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin(dl / 2) ** 2;
+        Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin(dl / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 function lineLen(coords) {
@@ -69,7 +69,7 @@ function splitAt(coords, frac) {
     cum.push(cum[i] + hav(coords[i][0], coords[i][1], coords[i + 1][0], coords[i + 1][1]));
   const total = cum[cum.length - 1];
   if (total <= 0) return { lat: coords[0][0], lon: coords[0][1], hdg: 0,
-    flown: [coords[0]], remaining: coords.slice() };
+                           flown: [coords[0]], remaining: coords.slice() };
   const target = frac * total;
   let seg = 0;
   while (seg < cum.length - 2 && cum[seg + 1] < target) seg++;
@@ -78,7 +78,7 @@ function splitAt(coords, frac) {
   const lat = coords[seg][0] + t * (coords[seg + 1][0] - coords[seg][0]);
   const lon = coords[seg][1] + t * (coords[seg + 1][1] - coords[seg][1]);
   const dispHdg = Math.atan2(coords[seg + 1][0] - coords[seg][0],
-    coords[seg + 1][1] - coords[seg][1]) * 180 / Math.PI;
+                             coords[seg + 1][1] - coords[seg][1]) * 180 / Math.PI;
   const compass = (90 - dispHdg + 360) % 360;
   return {
     lat, lon, hdg: compass,
@@ -91,7 +91,7 @@ function splitAt(coords, frac) {
 // the selected alternative, with the remaining flight time mapped along it.
 function activeSplit(frac) {
   const selR = (S.reroutes && S.selected != null && S.rerouteFrac != null)
-    ? S.reroutes.reroutes[S.selected] : null;
+        ? S.reroutes.reroutes[S.selected] : null;
   if (!selR) return splitAt(S.meta.filed, frac);
   const df = S.rerouteFrac;
   // Path actually flown up to the decision point: the committed trajectory if we
@@ -403,7 +403,7 @@ function draw() {
   // client-side plane split — follows the selected reroute once scrubbed past
   // the point where reroutes were evaluated (instant, no server round-trip).
   const selR = (S.reroutes && S.selected != null && S.rerouteFrac != null)
-    ? S.reroutes.reroutes[S.selected] : null;
+        ? S.reroutes.reroutes[S.selected] : null;
   const onReroute = selR && S.frac > S.rerouteFrac;
   const sp = activeSplit(S.frac);
 
@@ -522,12 +522,12 @@ function bindState() {
     sg.classList.remove("hidden");
     setText("sgId", `CONVECTIVE SIGMET ${st.sigmet.id}`);
     setHtml("sgBody", `Line of convective cells across filed track. Tops <b>${st.sigmet.tops}</b>. ` +
-      `Deviation advised — <b>${st.sigmet.worstDbz} dBZ</b> near ${st.sigmet.fix}.`);
+            `Deviation advised — <b>${st.sigmet.worstDbz} dBZ</b> near ${st.sigmet.fix}.`);
   } else sg.classList.add("hidden");
   // filed card badges from state
   setHtml("filedBadges",
-    `<span class="badge dbz">${st.filed.worstDbz} dBZ</span>` +
-    `<span class="badge ${tagClass(st.filed.sevLabel)}">${st.filed.sevLabel}</span>`);
+          `<span class="badge dbz">${st.filed.worstDbz} dBZ</span>` +
+          `<span class="badge ${tagClass(st.filed.sevLabel)}">${st.filed.sevLabel}</span>`);
   // upper-right controls box — live as you scrub the timeline
   setText("ctlTime", st.nowZ + "z");
   const wx = $("ctlWx");
@@ -545,7 +545,7 @@ function bindReroutes() {
   list.appendChild(origCard(S.reroutes.filed));     // original route, for comparison
   if (S.reroutes.count === 0) {
     list.insertAdjacentHTML("beforeend",
-      `<div class="rr-hint">No reroute needed — the filed track is clear from here.</div>`);
+                            `<div class="rr-hint">No reroute needed — the filed track is clear from here.</div>`);
     return;
   }
   S.reroutes.reroutes.forEach((r, i) => list.appendChild(rrCard(r, i)));
@@ -585,8 +585,8 @@ function bindLanding() {
     return;
   }
   const wind = L.wind_kt != null
-    ? `${String(Math.round(L.wind_dir_deg || 0)).padStart(3, "0")}° / <b>${Math.round(L.wind_kt)}</b> kt`
-    : "calm";
+        ? `${String(Math.round(L.wind_dir_deg || 0)).padStart(3, "0")}° / <b>${Math.round(L.wind_kt)}</b> kt`
+        : "calm";
   const gust = L.gust_kt ? ` G${Math.round(L.gust_kt)}` : "";
   const vis = L.visibility_mi != null ? ` · ${L.visibility_mi} mi vis` : "";
   const xw = L.crosswind_kt != null ? ` · X-wind ${L.crosswind_kt} kt` : "";
@@ -604,13 +604,13 @@ function rrCard(r, i) {
   el.className = "rr" + (r.recommended ? " reco" : "") +
     (i === S.selected ? " selected expanded" : "") + (r.entersOverload ? " over" : "");
   const fuel = r.addFuelLb >= 1000
-    ? (r.addFuelLb / 1000).toFixed(r.addFuelLb >= 10000 ? 1 : 2).replace(/\.?0+$/, "") + "k" : r.addFuelLb;
+        ? (r.addFuelLb / 1000).toFixed(r.addFuelLb >= 10000 ? 1 : 2).replace(/\.?0+$/, "") + "k" : r.addFuelLb;
   el.innerHTML = `
     <div class="rr-row">
       <span class="rr-idx">${String(i + 1).padStart(2, "0")}</span>
       <span class="rr-name">${r.name}</span>
       ${r.recommended ? '<span class="rr-reco-badge">RECOMMENDED</span>' : ""}
-      <span class="rr-fuel">+${fuel} lb</span>
+      <span class="rr-fuel">${r.addFuelLb ? "−" : ""}${fuel} lb</span>
     </div>
     <div class="rr-meta">
       <span>+${r.addTimeMin} min</span>
@@ -701,7 +701,7 @@ async function loadHotspot() {
     m.title = `Congestion ~${h.timeZ}z (${h.worstDbz} dBZ) — pre-computing reroutes…`;
     // Background precompute is usually done within a couple seconds.
     setTimeout(() => { if (S.hotspot === h) { m.classList.add("ready");
-      m.title = `Congestion ~${h.timeZ}z — reroutes ready. Click to jump.`; } }, 2600);
+                                              m.title = `Congestion ~${h.timeZ}z — reroutes ready. Click to jump.`; } }, 2600);
     m.onclick = () => jumpToHotspot(h);
   } catch (e) {}
 }
@@ -726,14 +726,14 @@ async function suggestReroutes() {
   const sp = following ? activeSplit(reqFrac) : null;
   try {
     const res = following
-      ? await fetch(url, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            lat: sp.lat, lon: sp.lon,
-            remaining: sp.remaining.map(c => [+c[0].toFixed(4), +c[1].toFixed(4)]),
-          }),
-        })
-      : await fetch(url);
+          ? await fetch(url, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              lat: sp.lat, lon: sp.lon,
+              remaining: sp.remaining.map(c => [+c[0].toFixed(4), +c[1].toFixed(4)]),
+            }),
+          })
+          : await fetch(url);
     S.reroutes = await res.json();
     S.committedPath = following ? sp.flown : null;   // lock in the path flown so far
     S.rerouteFrac = reqFrac;                          // plane follows the new selection past here
@@ -1003,6 +1003,6 @@ boot();
 let lastVer = null;
 setInterval(async () => {
   try { const v = await (await fetch("/api/version")).json();
-    if (lastVer && v.version !== lastVer) location.reload(); lastVer = v.version;
-  } catch (e) {}
+        if (lastVer && v.version !== lastVer) location.reload(); lastVer = v.version;
+      } catch (e) {}
 }, 1500);

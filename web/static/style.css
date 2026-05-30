@@ -105,7 +105,7 @@ html,body{height:100%;background:var(--bg);color:var(--txt);
 .rr-meta{display:flex;align-items:center;gap:8px;margin-top:7px;font-size:13px;
   color:var(--muted);font-family:var(--mono)}
 .rr-tag{font-size:11.5px;font-weight:700;letter-spacing:.4px}
-.rr-tag.light{color:var(--green)} .rr-tag.smooth{color:#46c7a0}
+.rr-tag.light{color:#e6c83c} .rr-tag.smooth{color:#46c7a0}
 .rr-tag.mod{color:var(--amber)} .rr-tag.sev{color:var(--red)}
 .rr-over{color:var(--red);font-weight:700;font-size:11.5px;margin-top:6px}
 
