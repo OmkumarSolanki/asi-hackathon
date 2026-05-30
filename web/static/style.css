@@ -104,25 +104,15 @@ html,body{height:100%;background:var(--bg);color:var(--txt);
 .rr-tag.mod{color:var(--amber)} .rr-tag.sev{color:var(--red)}
 .rr-over{color:var(--red);font-weight:700;font-size:10px;margin-top:5px}
 
-/* Collapsed (unselected) cards show only the headline row; the meta row,
-   overload note and detail appear when the card is selected/expanded. */
-.rr .rr-meta,.rr .rr-over{display:none}
-.rr.expanded .rr-meta{display:flex}
-.rr.expanded .rr-over{display:block}
+/* Every card shows its full info (headline + meta + overload note); selecting a
+   card just reveals the LOAD action. */
+.rr-over{display:block}
 
-/* expanded selected card */
-.rr.expanded .rr-detail{display:grid}
-.rr-detail{display:none;grid-template-columns:1fr 1fr;gap:12px 10px;margin-top:12px;
-  padding-top:12px;border-top:1px solid var(--line)}
-.rr-detail .big{grid-column:1/3}
-.rr-detail label{display:block;font-size:9px;letter-spacing:.8px;color:var(--muted2);
-  margin-bottom:3px}
-.rr-detail .big span{font-size:30px;font-weight:700;letter-spacing:1px}
-.rr-detail .v{font-size:15px;font-weight:600;font-family:var(--mono)}
-.rr-detail .v.cyan{color:var(--cyan)}
-.load-btn{grid-column:1/3;margin-top:4px;background:var(--cyan);color:#04222b;border:none;
-  border-radius:7px;padding:11px;font-weight:700;font-size:12px;letter-spacing:.6px;
-  cursor:pointer;font-family:var(--sans)}
+.rr-detail{display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.rr.expanded .rr-detail{display:block}
+.load-btn{width:100%;background:var(--cyan);color:#04222b;border:none;border-radius:7px;
+  padding:10px;font-weight:700;font-size:12px;letter-spacing:.6px;cursor:pointer;
+  font-family:var(--sans)}
 .load-btn:hover{background:#3fdcf2}
 
 /* ---------- Legends ---------- */

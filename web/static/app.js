@@ -507,11 +507,6 @@ function rrCard(r, i) {
     </div>
     ${r.entersOverload ? '<div class="rr-over">✗ enters over-demand sector</div>' : ""}
     <div class="rr-detail">
-      <div class="big"><label>NEXT FIX</label><span>${r.name}</span></div>
-      <div><label>ADD'L FUEL</label><div class="v cyan">+${r.addFuelLb.toLocaleString()} lb</div></div>
-      <div><label>ADD'L TIME</label><div class="v">+${r.addTimeMin} min</div></div>
-      <div><label>WORST WX</label><div class="v">${r.worstDbz} dBZ</div></div>
-      <div><label>ON THIS PATH</label><div class="v">${r.aircraft} aircraft</div></div>
       <button class="load-btn">LOAD REROUTE → ${r.name}</button>
     </div>`;
   el.addEventListener("click", ev => {
