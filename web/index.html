@@ -10,18 +10,6 @@
 <canvas id="map"></canvas>
 <canvas id="windFx" class="fx-canvas"></canvas>
 
-<!-- "Don't Crash!" badge (logo + curved caption) -->
-<div id="logoBadge" title="Don't Crash!">
-  <svg viewBox="0 0 124 148" width="108" height="129" aria-label="Don't Crash!">
-    <defs>
-      <clipPath id="circClip"><circle cx="62" cy="56" r="50"/></clipPath>
-    </defs>
-    <circle cx="62" cy="56" r="53" fill="#0a0f17" stroke="rgba(120,160,200,.25)" stroke-width="1.5"/>
-    <image href="/static/logo.jpg" x="12" y="6" width="100" height="100" clip-path="url(#circClip)"/>
-    <g id="capGroup" class="badge-cap"></g>
-  </svg>
-</div>
-
 <!-- Top-center: flight / date picker -->
 <div id="picker">
   <div class="pk-field"><label>DATE</label>
@@ -70,11 +58,26 @@
 
 <!-- Right: course corrections -->
 <aside id="panel">
-  <div class="panel-head">
-    <h1>COURSE CORRECTIONS</h1>
-    <span id="panelCount" class="panel-count">—</span>
+  <div class="panel-top">
+    <div class="panel-head-text">
+      <div class="panel-head">
+        <h1>COURSE CORRECTIONS</h1>
+        <span id="panelCount" class="panel-count">—</span>
+      </div>
+      <p class="panel-sub">Reroutes ranked by added fuel burn</p>
+    </div>
+    <!-- "Don't Crash!" badge (logo + curved caption) -->
+    <div id="logoBadge" title="Don't Crash!">
+      <svg viewBox="0 0 124 148" width="108" height="129" aria-label="Don't Crash!">
+        <defs>
+          <clipPath id="circClip"><circle cx="62" cy="56" r="50"/></clipPath>
+        </defs>
+        <circle cx="62" cy="56" r="53" fill="#0a0f17" stroke="rgba(120,160,200,.25)" stroke-width="1.5"/>
+        <image href="/static/logo.jpg" x="12" y="6" width="100" height="100" clip-path="url(#circClip)"/>
+        <g id="capGroup" class="badge-cap"></g>
+      </svg>
+    </div>
   </div>
-  <p class="panel-sub">Reroutes ranked by added fuel burn</p>
 
   <div id="filedCard" class="filed-card">
     <div class="filed-top"><span class="lbl">FILED · DIRECT</span>

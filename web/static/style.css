@@ -65,10 +65,13 @@ html,body{height:100%;background:var(--bg);color:var(--txt);
 /* ---------- Course-corrections panel ---------- */
 #panel{position:fixed;top:0;right:0;width:348px;height:100vh;background:var(--panel);
   border-left:1px solid var(--line);padding:18px 16px;overflow-y:auto;z-index:6}
-.panel-head{display:flex;justify-content:space-between;align-items:center}
+.panel-top{display:flex;justify-content:space-between;align-items:flex-start;
+  gap:10px;margin-bottom:14px}
+.panel-head-text{min-width:0}
+.panel-head{display:flex;align-items:baseline;gap:8px}
 .panel-head h1{font-size:14px;font-weight:700;letter-spacing:1.2px}
 .panel-count{color:var(--muted);font-size:13px;font-family:var(--mono)}
-.panel-sub{color:var(--muted);font-size:11px;margin:2px 0 14px}
+.panel-sub{color:var(--muted);font-size:11px;margin:2px 0 0}
 
 .filed-card{background:rgba(255,255,255,.02);border:1px solid var(--line);
   border-radius:9px;padding:10px 12px;margin-bottom:14px}
@@ -138,9 +141,10 @@ html,body{height:100%;background:var(--bg);color:var(--txt);
   background:var(--muted)}.sb-line::before{left:0}.sb-line::after{right:0}
 .scalebar span{font-size:10px;color:var(--muted);font-family:var(--mono)}
 
-/* ---------- "Don't Crash!" badge (top-right, left of the controls) ---------- */
-#logoBadge{position:fixed;top:14px;right:424px;z-index:6;
+/* ---------- "Don't Crash!" badge (top-right of the sidebar) ---------- */
+#logoBadge{flex:0 0 auto;margin:-2px -2px 0 0;
   filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))}
+#logoBadge svg{display:block;width:68px;height:auto}
 .badge-cap{font-family:var(--sans);font-size:15px;font-weight:800;
   letter-spacing:.5px;fill:#e02323}
 
