@@ -15,7 +15,9 @@ const S = {
   meta: null,        // /api/flight
   state: null,       // /api/state
   reroutes: null,    // /api/reroutes  (null until "Suggest" pressed)
-  selected: null,    // selected reroute name
+  selected: null,    // selected reroute index
+  rerouteFrac: null, // frac at which reroutes were evaluated (plane follows the
+                     // selected route past this point)
   frac: 0,           // scrub position 0..1
   view: null,        // [w,e,s,n]
   wx: null,          // weather Image
@@ -63,6 +65,22 @@ function splitAt(coords, frac) {
     lat, lon, hdg: compass,
     flown: coords.slice(0, seg + 1).concat([[lat, lon]]),
     remaining: [[lat, lon]].concat(coords.slice(seg + 1)),
+  };
+}
+// Plane split that follows the selected reroute. Before the reroute-decision
+// point (S.rerouteFrac) the aircraft is on the filed route; after it, it tracks
+// the selected alternative, with the remaining flight time mapped along it.
+function activeSplit(frac) {
+  const selR = (S.reroutes && S.selected != null && S.rerouteFrac != null)
+    ? S.reroutes.reroutes[S.selected] : null;
+  if (!selR || frac <= S.rerouteFrac) return splitAt(S.meta.filed, frac);
+  const df = S.rerouteFrac;
+  const rsp = splitAt(selR.coords, (frac - df) / Math.max(1e-6, 1 - df));
+  const filedFlown = splitAt(S.meta.filed, df).flown;     // filed up to the decision point
+  return {
+    lat: rsp.lat, lon: rsp.lon, hdg: rsp.hdg,
+    flown: filedFlown.slice(0, -1).concat(rsp.flown),
+    remaining: rsp.remaining,
   };
 }
 
@@ -250,35 +268,47 @@ function draw() {
   // traffic
   for (const t of (S.state && S.state.traffic) || []) { const [x, y] = proj(t.lat, t.lon); drawPlane(x, y, 5 * dpr, t.hdg, "rgba(165,190,215,.5)", false); }
 
-  // client-side plane split (instant)
-  const sp = splitAt(S.meta.filed, S.frac);
+  // client-side plane split — follows the selected reroute once scrubbed past
+  // the point where reroutes were evaluated (instant, no server round-trip).
+  const selR = (S.reroutes && S.selected != null && S.rerouteFrac != null)
+    ? S.reroutes.reroutes[S.selected] : null;
+  const onReroute = selR && S.frac > S.rerouteFrac;
+  const sp = activeSplit(S.frac);
 
   // flown history
   ctx.strokeStyle = "rgba(150,170,190,.45)"; ctx.lineWidth = 2 * dpr; ctx.setLineDash([]);
   if (sp.flown.length > 1) strokeCoords(sp.flown);
 
-  // filed remaining (dashed)
-  ctx.strokeStyle = "rgba(150,165,182,.7)"; ctx.lineWidth = 1.6 * dpr;
-  ctx.setLineDash([9 * dpr, 7 * dpr]); strokeCoords(sp.remaining); ctx.setLineDash([]);
+  // remaining ahead — the chosen reroute (colored) once committed, else filed (dashed)
+  if (onReroute) {
+    const g = routeGlow(selR);
+    ctx.save(); ctx.strokeStyle = g; ctx.lineWidth = 2.8 * dpr; ctx.lineJoin = "round";
+    ctx.shadowColor = g; ctx.shadowBlur = 10 * dpr; ctx.setLineDash([]);
+    strokeCoords(sp.remaining); ctx.restore();
+  } else {
+    ctx.strokeStyle = "rgba(150,165,182,.7)"; ctx.lineWidth = 1.6 * dpr;
+    ctx.setLineDash([9 * dpr, 7 * dpr]); strokeCoords(sp.remaining); ctx.setLineDash([]);
+  }
 
-  // reroutes (if computed) — colored by category so the suggestion is obvious:
+  // reroute options overlay — colored by category so the suggestion is obvious:
   //   recommended = green solid · viable alternate = blue dotted · rejected = red dashed
   if (S.reroutes) {
     S.reroutes.reroutes.forEach((r, i) => {
-      if (i === S.selected) return;                  // selected drawn last, on top
+      if (i === S.selected) return;                  // selected handled below
       const st = routeStyle(r);
       ctx.strokeStyle = st.color; ctx.lineWidth = st.w * dpr;
       ctx.setLineDash(st.dash.map(d => d * dpr));
       strokeCoords(r.coords);
     });
     ctx.setLineDash([]);
-    const sel = S.selected != null ? S.reroutes.reroutes[S.selected] : null;
-    if (sel) {                                        // emphasize selection in its own category color
-      const g = routeGlow(sel);
-      ctx.save(); ctx.strokeStyle = g; ctx.lineWidth = 3.4 * dpr;
-      ctx.shadowColor = g; ctx.shadowBlur = 14 * dpr; ctx.lineJoin = "round";
-      ctx.setLineDash([]); strokeCoords(sel.coords); ctx.restore();
-      const d = sel.coords[sel.coords.length - 1], [dx, dy] = proj(d[0], d[1]);
+    if (selR) {
+      const g = routeGlow(selR);
+      if (!onReroute) {                              // show the full chosen route ahead before committing
+        ctx.save(); ctx.strokeStyle = g; ctx.lineWidth = 3.4 * dpr;
+        ctx.shadowColor = g; ctx.shadowBlur = 14 * dpr; ctx.lineJoin = "round";
+        ctx.setLineDash([]); strokeCoords(selR.coords); ctx.restore();
+      }
+      const d = selR.coords[selR.coords.length - 1], [dx, dy] = proj(d[0], d[1]);
       diamond(dx, dy, 6 * dpr, g);
     }
   }
@@ -488,7 +518,7 @@ async function loadFlight() {
   const res = await fetch(`/api/flight?flight=${encodeURIComponent(S.flight)}&date=${S.date}`);
   const meta = await res.json();
   if (meta.error) { setText("pickerMsg", meta.error); return; }
-  S.meta = meta; S.reroutes = null; S.selected = null; S.frac = 0;
+  S.meta = meta; S.reroutes = null; S.selected = null; S.rerouteFrac = null; S.frac = 0;
   S.advisory = null; S.winds = null;
   $("advisory").classList.add("hidden"); $("landingStrip").classList.add("hidden");
   // Optional deep-link: start at a given time (and optionally auto-suggest).
@@ -555,6 +585,7 @@ async function suggestReroutes() {
   try {
     const res = await fetch(`/api/reroutes?flight=${encodeURIComponent(S.flight)}&date=${S.date}&time=${encodeURIComponent(t)}`);
     S.reroutes = await res.json();
+    S.rerouteFrac = S.frac;                 // plane follows the selected route past here
     let ri = S.reroutes.reroutes.findIndex(r => r.recommended);
     S.selected = ri >= 0 ? ri : (S.reroutes.reroutes.length ? 0 : null);
     bindReroutes(); draw();
@@ -648,9 +679,10 @@ const refreshWindsLive = throttleLatest(fetchWinds);
 let scrubTimer = null;
 function onScrub() {
   S.frac = (+$("timeSlider").value) / 1000;
-  // moving the plane invalidates any prior reroutes; the AI advisory is loaded
-  // once at page load and left in place persistently, so it is NOT cleared here.
-  if (S.reroutes) { S.reroutes = null; S.selected = null; bindReroutes(); }
+  // Keep the reroutes while one is selected so the plane can follow it as you
+  // scrub; otherwise a scrub invalidates the position-specific suggestions.
+  // The AI advisory is loaded once at page load and left in place persistently.
+  if (S.reroutes && S.selected == null) { S.reroutes = null; S.rerouteFrac = null; bindReroutes(); }
   updateScrubText(); draw();                       // instant plane move
   refreshTrafficLive();                            // live other-aircraft positions
   refreshWeatherLive();                            // live radar follows the timeline
