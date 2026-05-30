@@ -235,25 +235,3 @@ html,body{height:100%;background:var(--bg);color:var(--txt);
 .ls-body{font-size:12px;color:var(--txt);font-family:var(--mono);line-height:1.5}
 .ls-body b{color:var(--cyan)}
 .ls-warn{margin-top:6px;font-size:10.5px;color:var(--amber);line-height:1.4}
-
-/* ---------- AI advisory block ---------- */
-.advisory{background:rgba(35,207,232,.05);border:1px solid rgba(35,207,232,.28);
-  border-radius:10px;padding:11px 12px;margin-bottom:14px}
-.adv-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.adv-title{font-size:11px;font-weight:700;letter-spacing:1px;color:var(--cyan)}
-.adv-conf{font-size:9px;font-weight:700;letter-spacing:.6px;padding:2px 7px;border-radius:4px;
-  font-family:var(--mono)}
-.adv-conf.high{background:#123026;color:var(--green)}
-.adv-conf.medium{background:#3a2a12;color:var(--amber)}
-.adv-conf.low{background:#3a1416;color:var(--red)}
-.adv-brief{font-size:11.5px;line-height:1.55;color:#cdd8e4;white-space:pre-line;
-  font-family:var(--mono)}
-.adv-brief.loading{color:var(--muted);font-style:italic}
-.adv-crowd,.adv-analogs{margin-top:10px;padding-top:9px;border-top:1px solid var(--line)}
-.adv-row{display:flex;justify-content:space-between;align-items:center}
-.adv-label{font-size:9px;letter-spacing:.9px;color:var(--muted2)}
-.adv-verdict{font-size:11px;font-weight:700;font-family:var(--mono);letter-spacing:.4px}
-.adv-verdict.go{color:var(--green)} .adv-verdict.no{color:var(--red)}
-.adv-verdict.unknown{color:var(--muted)}
-.adv-count{font-size:13px;font-weight:700;font-family:var(--mono);color:var(--cyan)}
-.adv-detail{font-size:10.5px;color:var(--muted);line-height:1.45;margin-top:4px}

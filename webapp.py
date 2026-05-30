@@ -31,11 +31,9 @@ from flask import Flask, jsonify, request, send_file, send_from_directory
 
 import dont_crash as dc
 
-# The advisory feature modules (briefing, crowd-forecast, PIREP analogs, METAR,
-# winds, fuel) live in the ``backend/app`` package merged in from the FastAPI
-# version. They use absolute ``app.*`` imports, so put ``backend/`` on sys.path
-# and import them lazily inside the endpoints (keeps startup cheap and resilient
-# if an optional dep like ``anthropic`` is missing).
+# The feature modules (METAR, winds, fuel) live in the ``backend/app`` package
+# merged in from the FastAPI version. They use absolute ``app.*`` imports, so put
+# ``backend/`` on sys.path and import them lazily inside the endpoints.
 sys.path.insert(0, str(Path(__file__).resolve().parent / "backend"))
 
 BUNDLE = os.environ.get("BUNDLE", "hackathon_data_bundle")
@@ -43,10 +41,6 @@ FUEL_LB_PER_NM = 13.0            # legacy flat fallback; real burn comes from fu
 RESERVE_FUEL_LB = 8000.0
 TRAFFIC_CORRIDOR_DEG = 0.55
 TRAFFIC_MAX = 180
-
-# Cache for the on-demand advisory bundle (brief + crowd + analogs + landing),
-# keyed like the reroute cache so re-opening the panel at a point is instant.
-_ADVISORY_CACHE = {}
 
 app = Flask(__name__, static_folder="web/static", static_url_path="/static")
 
@@ -205,16 +199,9 @@ def _native(o):
 
 
 # --------------------------------------------------------------------------
-# Advisory bridge — map haxney's (flight, date, time) world onto the merged
-# ``app.*`` services, which key everything by scenario_id + tz-aware UTC time.
+# Bridge helpers — map haxney's (flight, date, time) world onto the merged
+# ``app.*`` services, which key everything by tz-aware UTC time.
 # --------------------------------------------------------------------------
-def _scenario_id(snapshot_dir):
-    """``…/asked_at_2025-07-08T22:00:00Z`` -> ``2025-07-08T22:00:00Z`` (what the
-    app.core loaders expect)."""
-    name = os.path.basename(str(snapshot_dir).rstrip("/"))
-    return name[len("asked_at_"):] if name.startswith("asked_at_") else name
-
-
 def _utc(dt):
     """Normalize a (possibly naive) datetime to tz-aware UTC, since the services
     compare against tz-aware weather/route timestamps."""
@@ -232,39 +219,6 @@ def _burn_rate(flight):
         return fuel.burn_rate_lb_per_nm(atype, float(flight.get("cruise_altitude_ft") or 36000))
     except Exception:
         return FUEL_LB_PER_NM
-
-
-def _worst_encounter(scenario_id, lats, lons, alt_ft, ct, step_nm=25.0):
-    """Walk a route and return the hottest weather point: (lat, lon, refc, retop).
-    refc/retop are sampled via the same simulator the analog archive uses so the
-    k-NN lookup is consistent. Returns the route midpoint with refc=0 if clear."""
-    from app.core.simulator import sample_wx_at
-    best = None
-    for i in range(len(lats) - 1):
-        seg = dc.haversine_nm(lats[i], lons[i], lats[i + 1], lons[i + 1])
-        steps = max(1, int(seg / step_nm))
-        for s in range(steps + 1):
-            t = s / steps
-            la = lats[i] + t * (lats[i + 1] - lats[i])
-            lo = lons[i] + t * (lons[i + 1] - lons[i])
-            refc = sample_wx_at(scenario_id, "refc", la, lo, ct)
-            if refc is None:
-                continue
-            if best is None or refc > best[2]:
-                retop = sample_wx_at(scenario_id, "retop", la, lo, ct)
-                best = (la, lo, float(refc), retop)
-    if best is None:
-        mid = len(lats) // 2
-        return float(lats[mid]), float(lons[mid]), 0.0, None
-    return best
-
-
-def _confidence(analog_count):
-    if analog_count >= 12:
-        return "HIGH"
-    if analog_count >= 4:
-        return "MEDIUM"
-    return "LOW"
 
 
 # --------------------------------------------------------------------------
@@ -548,62 +502,9 @@ def find_hotspot(flight_number, date):
 
 
 # --------------------------------------------------------------------------
-# Advisory feature computations (crowd-forecast, PIREP analogs, landing METAR,
-# winds, AI briefing) — built on top of haxney's flight state, not replacing the
-# A* route planning.
+# Feature computations (landing METAR, winds) — built on top of haxney's flight
+# state, not replacing the A* route planning.
 # --------------------------------------------------------------------------
-def _encounter_ctx(flight_number, date, time_arg):
-    """Resolve the flight + the hottest weather point on its remaining filed
-    route at the current time. Shared by the crowd / analogs / briefing endpoints."""
-    ctx, err = _resolve(flight_number, date, time_arg)
-    if err:
-        return None, err
-    f, ct = ctx["flight"], _utc(ctx["ct"])
-    lats, lons = f["lats"], f["lons"]
-    alt = float(f.get("cruise_altitude_ft") or 36000)
-    frac = dc.flight_fraction(f, ctx["ct"])
-    plat, plon, _, _, remaining = dc.split_at_fraction(lats, lons, frac)
-    sid = _scenario_id(ctx["sd"])
-    enc_lat, enc_lon, refc, retop = _worst_encounter(
-        sid, remaining[0], remaining[1], alt, ct)
-    if refc < dc.HAZARD_DBZ:                  # no real hazard ahead → use plane pos
-        enc_lat, enc_lon = plat, plon
-    return {
-        "ctx": ctx, "sid": sid, "ct": ct, "alt": alt,
-        "enc_lat": enc_lat, "enc_lon": enc_lon, "refc": refc, "retop": retop,
-    }, None
-
-
-def crowd_compute(flight_number, date, time_arg):
-    info, err = _encounter_ctx(flight_number, date, time_arg)
-    if err:
-        return err
-    from app.services.crowd_forecast import crowd_signal
-    sig = crowd_signal(info["sid"], info["enc_lat"], info["enc_lon"],
-                       info["ct"], info["alt"])
-    sig["at"] = {"lat": round(info["enc_lat"], 3), "lon": round(info["enc_lon"], 3),
-                 "refc": round(info["refc"])}
-    return sig, 200
-
-
-def analogs_compute(flight_number, date, time_arg):
-    info, err = _encounter_ctx(flight_number, date, time_arg)
-    if err:
-        return err
-    from app.services.pirep import find_analogs, analog_summary
-    analogs = find_analogs(info["refc"], info["retop"], info["alt"], k=24)
-    summary = analog_summary(analogs)
-    summary["encounter"] = {"refc": round(info["refc"]),
-                            "retop": round(info["retop"]) if info["retop"] else None}
-    summary["preview"] = [
-        {"scenario": a["scenario"], "flight": a["flight"],
-         "origin": a["origin"], "destination": a["destination"],
-         "refc": a["refc_dbz"], "similarity": a["similarity"]}
-        for a in analogs[:5]
-    ]
-    return summary, 200
-
-
 def landing_compute(flight_number, date, time_arg):
     ctx, err = _resolve(flight_number, date, time_arg)
     if err:
@@ -630,85 +531,6 @@ def winds_compute(date, time_arg):
         t = datetime.fromisoformat(payload["asked_at"])
     from app.services.winds import fetch_winds
     return fetch_winds(_utc(t).isoformat()), 200
-
-
-def advisory_compute(flight_number, date, time_arg):
-    """Aggregate everything the cockpit's ADVISORY panel needs in one shot:
-    the AI briefing plus the crowd / analogs / landing / fuel context it is
-    grounded in. Cached per (flight, date, minute) — it calls Claude."""
-    ctx, err = _resolve(flight_number, date, time_arg)
-    if err:
-        return err
-    f, ct = ctx["flight"], ctx["ct"]
-    cache_key = (f["flight_number"], date, ct.strftime("%Y-%m-%dT%H:%M"))
-    with _CACHE_LOCK:
-        if cache_key in _ADVISORY_CACHE:
-            return _ADVISORY_CACHE[cache_key], 200
-
-    crowd, _ = crowd_compute(flight_number, date, time_arg)
-    analogs, _ = analogs_compute(flight_number, date, time_arg)
-    landing, _ = landing_compute(flight_number, date, time_arg)
-    reroutes, _ = reroutes_compute(flight_number, date, time_arg)
-    reco = next((r for r in reroutes.get("reroutes", []) if r.get("recommended")), None)
-
-    remaining_nm = reroutes.get("remainingNm", 0)
-    burn = _burn_rate(f)
-    try:
-        from app.services import fuel as _fuel
-        atype = _fuel.aircraft_type_for(f["flight_number"])
-    except Exception:
-        atype = aircraft_type(f["flight_number"])
-    fuel = {
-        "type": atype,
-        "remaining_lb": round(remaining_nm * burn + RESERVE_FUEL_LB),
-        "reserve_lb": RESERVE_FUEL_LB,
-        "burn_lb_per_nm": round(burn, 2),
-    }
-
-    filed = reroutes.get("filed", {})
-    confidence = _confidence(analogs.get("count", 0))
-    rec_payload = None
-    if reco:
-        rec_payload = {"label": f"reroute via {reco['name']}",
-                       "fuel_delta_lb": reco["addFuelLb"],
-                       "time_delta_min": reco["addTimeMin"],
-                       "distance_nm": reco["distNm"]}
-    payload = {
-        "flight": {
-            "callsign": f["flight_number"],
-            "aircraft_type": fuel["type"],
-            "origin": f.get("origin_airport_icao"),
-            "destination": f.get("destination_airport_icao"),
-            "altitude_ft": f.get("cruise_altitude_ft"),
-            "cruise_kt": f.get("cruise_speed_kt"),
-        },
-        "weather_summary": (f"{filed.get('sevLabel','SMOOTH')} on filed route, "
-                            f"peak {filed.get('worstDbz',0)} dBZ"),
-        "recommended_route": rec_payload,
-        "crowd_signal": crowd,
-        "analogs": analogs,
-        "fuel": fuel,
-        "landing_weather": landing,
-        "confidence": confidence,
-        "time": _utc(ct).isoformat(),
-        "scenario": _scenario_id(ctx["sd"]),
-    }
-    from app.services.briefing import generate_briefing
-    brief = generate_briefing(payload)
-
-    result = {
-        "brief": brief,
-        "confidence": confidence,
-        "crowd": crowd,
-        "analogs": analogs,
-        "landing": landing,
-        "fuel": fuel,
-        "recommended": rec_payload,
-        "weatherSummary": payload["weather_summary"],
-    }
-    with _CACHE_LOCK:
-        _ADVISORY_CACHE[cache_key] = result
-    return result, 200
 
 
 # --------------------------------------------------------------------------
@@ -785,22 +607,6 @@ def api_hotspot():
     return jsonify(_native(data)), status
 
 
-@app.route("/api/crowd")
-def api_crowd():
-    data, status = crowd_compute(request.args.get("flight", ""),
-                                 request.args.get("date", ""),
-                                 request.args.get("time", ""))
-    return jsonify(_native(data)), status
-
-
-@app.route("/api/analogs")
-def api_analogs():
-    data, status = analogs_compute(request.args.get("flight", ""),
-                                   request.args.get("date", ""),
-                                   request.args.get("time", ""))
-    return jsonify(_native(data)), status
-
-
 @app.route("/api/landing")
 def api_landing():
     data, status = landing_compute(request.args.get("flight", ""),
@@ -853,14 +659,6 @@ def api_sectors():
     data, status = sectors_compute(request.args.get("date", ""),
                                    request.args.get("time", ""),
                                    request.args.get("band", "high"))
-    return jsonify(_native(data)), status
-
-
-@app.route("/api/advisory")
-def api_advisory():
-    data, status = advisory_compute(request.args.get("flight", ""),
-                                    request.args.get("date", ""),
-                                    request.args.get("time", ""))
     return jsonify(_native(data)), status
 
 

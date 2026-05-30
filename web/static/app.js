@@ -27,7 +27,7 @@ const S = {
   wx: null,          // weather Image
   states: null, cities: [],
   dpr: 1,
-  advisory: null,    // /api/advisory (brief + crowd + analogs + landing)
+  landing: null,     // /api/landing destination METAR
   winds: null,       // /api/winds station vectors
   windsOn: false,    // wind streamlines toggle
   sectors: null,     // /api/sectors HIGH-band polygons
@@ -549,42 +549,9 @@ function bindReroutes() {
   S.reroutes.reroutes.forEach((r, i) => list.appendChild(rrCard(r, i)));
 }
 
-function verdictClass(v) {
-  if (!v || v === "UNKNOWN") return "unknown";
-  return v.includes("NO") ? "no" : "go";
-}
-function bindAdvisory() {
-  const box = $("advisory");
-  const a = S.advisory;
-  if (!a) { box.classList.add("hidden"); return; }
-  box.classList.remove("hidden");
-  const conf = (a.confidence || "MEDIUM").toLowerCase();
-  setText("advConf", `CONF ${a.confidence || "MED"}`);
-  $("advConf").className = "adv-conf " + conf;
-  const brief = $("advBrief");
-  brief.classList.remove("loading");
-  brief.textContent = a.brief || "—";
-  // Crowd-forecast
-  const c = a.crowd;
-  if (c && c.n_observed > 0) {
-    $("advCrowd").classList.remove("hidden");
-    setText("advVerdict", c.verdict);
-    $("advVerdict").className = "adv-verdict " + verdictClass(c.verdict);
-    setText("advCrowdLine", c.headline || `${c.n_detoured} of ${c.n_observed} nearby flights detoured.`);
-  } else $("advCrowd").classList.add("hidden");
-  // Historical analogs
-  const an = a.analogs;
-  if (an && an.count > 0) {
-    $("advAnalogs").classList.remove("hidden");
-    setText("advAnalogCount", an.count);
-    setText("advAnalogLine",
-      `Median ${an.median_refc} dBZ · ${an.scenarios} day(s) in the ${an.count}-match archive.`);
-  } else $("advAnalogs").classList.add("hidden");
-  bindLanding();
-}
 function bindLanding() {
   const strip = $("landingStrip");
-  const L = S.advisory && S.advisory.landing;
+  const L = S.landing;
   if (!L) { strip.classList.add("hidden"); return; }
   strip.classList.remove("hidden");
   setText("lsIcao", L.icao || (S.meta && S.meta.flight.dest) || "—");
@@ -664,8 +631,8 @@ async function loadFlight() {
   const meta = await res.json();
   if (meta.error) { setText("pickerMsg", meta.error); return; }
   S.meta = meta; S.reroutes = null; S.selected = null; S.rerouteFrac = null; S.frac = 0;
-  S.committedPath = null; S.advisory = null; S.winds = null; S.sectors = null;
-  $("advisory").classList.add("hidden"); $("landingStrip").classList.add("hidden");
+  S.committedPath = null; S.landing = null; S.winds = null; S.sectors = null;
+  $("landingStrip").classList.add("hidden");
   // Optional deep-link: start at a given time (and optionally auto-suggest).
   if (pendingTime) {
     let ts = pendingTime.trim();
@@ -686,7 +653,7 @@ async function loadFlight() {
   if (pendingSuggest) await suggestReroutes();
   pendingTime = null; pendingSuggest = false;
   loadHotspot();   // background: find congested point + pre-warm reroute cache
-  fetchAdvisory(); // background: load the AI advisory once; it then persists
+  fetchLanding();  // background: destination landing weather
   if (S.windsOn) fetchWinds().then(() => { if (S.windsOn) startWindFx(); });
   if (S.sectorsOn) fetchSectors();
 }
@@ -754,27 +721,18 @@ async function suggestReroutes() {
   } finally { btn.disabled = false; btn.textContent = "⟳ Suggest reroutes"; }
 }
 
-// AI advisory bundle (brief + crowd-forecast + analogs + landing weather).
-// Heavier (calls Claude), so it's fired after reroutes and shows a loading state.
-let advisorySeq = 0;
-async function fetchAdvisory() {
+// Destination landing weather (METAR). Loaded once per flight.
+let landingSeq = 0;
+async function fetchLanding() {
   if (!S.meta) return;
-  const seq = ++advisorySeq;
+  const seq = ++landingSeq;
   const t = timeIso();
-  const box = $("advisory"), brief = $("advBrief");
-  box.classList.remove("hidden");
-  $("advCrowd").classList.add("hidden"); $("advAnalogs").classList.add("hidden");
-  brief.classList.add("loading"); brief.textContent = "Generating briefing…";
-  setText("advConf", "…"); $("advConf").className = "adv-conf";
   try {
-    const res = await fetch(`/api/advisory?flight=${encodeURIComponent(S.flight)}&date=${S.date}&time=${encodeURIComponent(t)}`);
-    const a = await res.json();
-    if (seq !== advisorySeq) return;     // a newer scrub/flight superseded this
-    if (a.error) { S.advisory = null; box.classList.add("hidden"); return; }
-    S.advisory = a; bindAdvisory();
-  } catch (e) {
-    if (seq === advisorySeq) { brief.classList.remove("loading"); brief.textContent = "Briefing unavailable."; }
-  }
+    const res = await fetch(`/api/landing?flight=${encodeURIComponent(S.flight)}&date=${S.date}&time=${encodeURIComponent(t)}`);
+    const L = await res.json();
+    if (seq !== landingSeq || L.error) return;   // superseded or failed
+    S.landing = L; bindLanding();
+  } catch (e) {}
 }
 
 let windsSeq = 0;
@@ -876,7 +834,6 @@ function onScrub() {
   S.frac = (+$("timeSlider").value) / 1000;
   // Keep the reroutes while one is selected so the plane can follow it as you
   // scrub; otherwise a scrub invalidates the position-specific suggestions.
-  // The AI advisory is loaded once at page load and left in place persistently.
   if (S.reroutes && S.selected == null) { S.reroutes = null; S.rerouteFrac = null; S.committedPath = null; bindReroutes(); }
   updateScrubText(); draw();                       // instant plane move
   refreshTrafficLive();                            // live other-aircraft positions

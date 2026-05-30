@@ -15,8 +15,7 @@ dependencies = [
     "shapely",
     "pillow",
     "flask",
-    # additional advisory features ported from the FastAPI version
-    "anthropic",        # AI briefing (briefing.py); needs ANTHROPIC_API_KEY
+    # additional features ported from the FastAPI version
     "requests",         # historical METAR + winds (metar.py, winds.py)
     "python-dotenv",    # .env loading (app/core/config.py)
 ]
