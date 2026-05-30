@@ -69,6 +69,8 @@
   <div class="ctl btn toggle" id="windBtn" title="Toggle surface winds">WIND</div>
   <div class="ctl readout"><label>NOWCAST</label><span id="nowcast">+0:00</span></div>
   <div class="ctl readout"><label>RADAR ALT</label><span id="radarAlt">—</span></div>
+  <div class="ctl readout"><label>TIME</label><span id="ctlTime">—</span></div>
+  <div class="ctl readout"><label>WX AHEAD</label><span id="ctlWx">—</span></div>
 </div>
 
 <!-- Right: course corrections -->
@@ -142,7 +144,9 @@
   <span class="lg-item"><i class="swatch rejected"></i>Rejected</span>
   <span class="lg-item"><i class="swatch filed"></i>Filed route</span>
   <span class="lg-item"><i class="swatch traffic">✈</i>Traffic</span>
-  <span id="lgWind" class="lg-item hidden"><i class="swatch wind">↗</i>Winds (kt)</span>
+  <span id="lgWind" class="lg-item hidden">Wind
+    <i class="wdot calm"></i><i class="wdot mod"></i><i class="wdot strong"></i>
+    <small>&lt;25·25·40+ kt</small></span>
   <span class="lg-status"><i class="dot"></i><span id="statusText">Live · NEXRAD mosaic</span></span>
 </div>
 

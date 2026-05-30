@@ -7,7 +7,9 @@ at the busiest airports across CONUS. Good enough to show 'where the wind is mov
 without inventing a wind field.
 """
 
+import math
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from typing import Any
 
 from app.services.metar import fetch_metar
@@ -29,31 +31,56 @@ MAJOR_AIRPORTS: list[tuple[str, float, float]] = [
 ]
 
 
-def _synthetic_wind(lat: float, lon: float) -> tuple[float, float]:
+def _synthetic_wind(lat: float, lon: float, hours: float | None = None) -> tuple[float, float]:
     """Climatological fallback when METAR data is missing.
 
     Prevailing US flow is westerly (jet stream); strength varies modestly with latitude
     and is stronger over the upper Midwest. Direction wind COMES FROM, in degrees.
+
+    When ``hours`` (absolute hours since the epoch) is given, a slow,
+    location-phased diurnal modulation is added so the field visibly evolves as
+    the user scrubs the timeline — the bundle has no real wind grid, so this is
+    an explicitly synthetic approximation.
     """
     base_dir = 270.0  # westerly
     # Slight curvature: higher latitudes ~ 280°, lower ~ 250°
     dir_deg = base_dir + (lat - 38) * 1.4
     # Speed: 10 kt baseline + latitude bump + small east-west variation
     speed = 12.0 + max(0.0, (lat - 30) * 0.5) + max(0.0, (-95 - lon) * 0.05)
-    speed = max(6.0, min(40.0, speed))
+    if hours is not None:
+        ph = (lon + lat) * 0.05               # phase varies by location
+        dir_deg += 25.0 * math.sin(hours / 3.0 + ph)        # veers over a few hours
+        speed += 8.0 * math.sin(hours / 2.0 + ph * 1.7)     # pulses over a few hours
+    speed = max(4.0, min(48.0, speed))
     return dir_deg % 360.0, round(speed, 1)
+
+
+def _coarse_metar_when(when: str) -> str:
+    """Round the time to a 30-min bucket for the METAR fetch so continuous
+    scrubbing reuses the cache (and the network) instead of hammering it."""
+    try:
+        dt = datetime.fromisoformat(when.replace("Z", "+00:00"))
+    except Exception:
+        return when
+    return dt.replace(minute=(dt.minute // 30) * 30, second=0, microsecond=0).isoformat()
 
 
 def fetch_winds(when: str) -> dict[str, Any]:
     """Fetch wind for ~30 major airports.
 
     Tries METAR first. If METAR data is missing for a station, falls back to a
-    climatological synthetic wind (clearly labeled) so the map always has data
-    to show — METAR archive coverage is patchy for some past dates.
+    time-varying synthetic wind (clearly labeled) so the map always has data and
+    evolves as you scrub — METAR archive coverage is patchy for some past dates.
     """
+    metar_when = _coarse_metar_when(when)
+    try:
+        hours = datetime.fromisoformat(when.replace("Z", "+00:00")).timestamp() / 3600.0
+    except Exception:
+        hours = None
+
     def _one(item: tuple[str, float, float]) -> dict[str, Any]:
         icao, lat, lon = item
-        m = fetch_metar(icao, when)
+        m = fetch_metar(icao, metar_when)
         if m is not None and m.get("wind_kt") is not None and m.get("wind_dir_deg") is not None:
             return {
                 "icao": icao,
@@ -64,8 +91,8 @@ def fetch_winds(when: str) -> dict[str, Any]:
                 "gust_kt": m.get("gust_kt"),
                 "source": "metar",
             }
-        # Fallback: synthetic climatological wind
-        d, s = _synthetic_wind(lat, lon)
+        # Fallback: time-varying synthetic climatological wind
+        d, s = _synthetic_wind(lat, lon, hours)
         return {
             "icao": icao,
             "lat": lat,

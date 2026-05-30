@@ -142,26 +142,58 @@ function routeGlow(r) {
 // Surface-wind vectors: an arrow per station pointing the way the wind blows
 // (wind_dir_deg is the direction it comes FROM, so we add 180°). Green under
 // 40 kt, red at/above. Length scales with speed.
+function windColor(spd) {
+  return spd >= 40 ? "rgba(255,120,120,.9)"
+       : spd >= 25 ? "rgba(240,185,90,.85)"
+       : "rgba(80,210,170,.82)";
+}
+function windArrow(x, y, to, len, col) {
+  const ex = x + Math.sin(to) * len, ey = y - Math.cos(to) * len;   // 0°=N(up): dx=sin, dy=-cos
+  ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1.3 * S.dpr;
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.stroke();
+  const a1 = to + Math.PI * 0.82, a2 = to - Math.PI * 0.82, h = 4 * S.dpr;
+  ctx.beginPath(); ctx.moveTo(ex, ey);
+  ctx.lineTo(ex + Math.sin(a1) * h, ey - Math.cos(a1) * h);
+  ctx.lineTo(ex + Math.sin(a2) * h, ey - Math.cos(a2) * h);
+  ctx.closePath(); ctx.fill();
+}
+// Dense wind field: the ~36 station obs are interpolated (inverse-distance) onto
+// a regular screen grid, so there's an arrow roughly everywhere — easy to read
+// the wind ahead on a route, not just at airports.
 function drawWinds() {
   if (!S.winds || !S.winds.stations) return;
-  const dpr = S.dpr;
-  for (const w of S.winds.stations) {
-    if (w.lon < S.view[0] || w.lon > S.view[1] || w.lat < S.view[2] || w.lat > S.view[3]) continue;
-    const [x, y] = proj(w.lat, w.lon);
-    const to = ((w.wind_dir_deg + 180) % 360) * Math.PI / 180;   // dir wind goes toward
-    // canvas: x right, y down; 0°=N(up). dx=sin, dy=-cos
-    const len = (8 + Math.min(28, w.wind_kt * 0.7)) * dpr;
-    const ex = x + Math.sin(to) * len, ey = y - Math.cos(to) * len;
-    const col = w.wind_kt >= 40 ? "rgba(255,120,120,.9)" : "rgba(80,210,170,.85)";
-    ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1.6 * dpr;
-    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.stroke();
-    // arrowhead
-    const a1 = to + Math.PI * 0.82, a2 = to - Math.PI * 0.82, h = 5 * dpr;
-    ctx.beginPath(); ctx.moveTo(ex, ey);
-    ctx.lineTo(ex + Math.sin(a1) * h, ey - Math.cos(a1) * h);
-    ctx.lineTo(ex + Math.sin(a2) * h, ey - Math.cos(a2) * h);
-    ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.arc(x, y, 1.6 * dpr, 0, 7); ctx.fill();
+  const dpr = S.dpr, W = canvas.width, H = canvas.height;
+  // Station vectors as (u=east, v=north) of the direction the wind travels TO.
+  const st = S.winds.stations.map(s => {
+    const to = (s.wind_dir_deg + 180) * Math.PI / 180;
+    return { lat: s.lat, lon: s.lon, u: s.wind_kt * Math.sin(to), v: s.wind_kt * Math.cos(to) };
+  });
+  const step = 58 * dpr;                          // grid spacing (device px)
+  for (let py = step * 0.5; py < H; py += step) {
+    for (let px = step * 0.5; px < W; px += step) {
+      const [lat, lon] = unproj(px, py);
+      if (lat < 21.9 || lat > 55.8 || lon < -135 || lon > -67.5) continue;   // wx grid bounds
+      let su = 0, sv = 0, sw = 0;                  // inverse-distance (1/d^4) interpolation
+      for (const s of st) {
+        const dla = lat - s.lat, dlo = (lon - s.lon) * Math.cos(lat * Math.PI / 180);
+        const d2 = dla * dla + dlo * dlo + 0.05;
+        const wgt = 1 / (d2 * d2);
+        su += s.u * wgt; sv += s.v * wgt; sw += wgt;
+      }
+      if (sw <= 0) continue;
+      const u = su / sw, v = sv / sw, spd = Math.hypot(u, v);
+      if (spd < 0.5) continue;
+      const len = (6 + Math.min(18, spd * 0.5)) * dpr;
+      windArrow(px, py, Math.atan2(u, v), len, windColor(spd));
+    }
+  }
+  // faint dots at the real observation sites (brighter for live METAR)
+  const [w, e, sLat, n] = S.view;
+  for (const s of S.winds.stations) {
+    if (s.lon < w || s.lon > e || s.lat < sLat || s.lat > n) continue;
+    const [x, y] = proj(s.lat, s.lon);
+    ctx.fillStyle = s.source === "metar" ? "rgba(120,220,255,.8)" : "rgba(150,170,190,.4)";
+    ctx.beginPath(); ctx.arc(x, y, 1.8 * dpr, 0, 7); ctx.fill();
   }
 }
 
@@ -316,6 +348,12 @@ function bindState() {
   setHtml("filedBadges",
     `<span class="badge dbz">${st.filed.worstDbz} dBZ</span>` +
     `<span class="badge ${tagClass(st.filed.sevLabel)}">${st.filed.sevLabel}</span>`);
+  // upper-right controls box — live as you scrub the timeline
+  setText("ctlTime", st.nowZ + "z");
+  const wx = $("ctlWx");
+  wx.textContent = `${st.filed.worstDbz} dBZ`;
+  wx.style.color = dbzColor(st.filed.worstDbz);
+  wx.title = st.filed.sevLabel;
 }
 function bindReroutes() {
   const list = $("rerouteList"), hint = $("rerouteHint");
@@ -546,11 +584,14 @@ async function fetchAdvisory() {
   }
 }
 
+let windsSeq = 0;
 async function fetchWinds() {
   if (!S.meta) return;
+  const seq = ++windsSeq;
   const t = timeIso();
   try {
     const d = await (await fetch(`/api/winds?date=${S.date}&time=${encodeURIComponent(t)}`)).json();
+    if (seq !== windsSeq) return;                  // a newer scrub superseded this
     if (d && d.stations) { S.winds = d; draw(); }
   } catch (e) {}
 }
@@ -564,7 +605,11 @@ function toggleWinds() {
 // ------------- scrubber -------------
 function updateScrubText() {
   setText("scPct", Math.round(S.frac * 100) + "%");
-  if (S.meta) setText("scNow", new Date(timeIso()).toISOString().slice(11, 16) + "z");
+  if (S.meta) {
+    const z = new Date(timeIso()).toISOString().slice(11, 16) + "z";
+    setText("scNow", z);
+    setText("ctlTime", z);                 // instant time in the controls box while dragging
+  }
 }
 // Live traffic during scrub: one request in flight at a time, always chasing
 // the latest scrub position so other aircraft move as you drag.
@@ -585,6 +630,21 @@ async function refreshTrafficLive() {
   if (trafficPending) { trafficPending = false; refreshTrafficLive(); }
 }
 
+// Run an async refresh with at most one request in flight, always chasing the
+// latest scrub position (drop intermediate frames). Used for the radar + winds
+// so they follow the timeline live instead of only on settle.
+function throttleLatest(fn) {
+  let busy = false, pending = false;
+  return async function run() {
+    if (busy) { pending = true; return; }
+    busy = true;
+    try { await fn(); } finally { busy = false; }
+    if (pending) { pending = false; run(); }
+  };
+}
+const refreshWeatherLive = throttleLatest(() => fetchWeather().then(draw));
+const refreshWindsLive = throttleLatest(fetchWinds);
+
 let scrubTimer = null;
 function onScrub() {
   S.frac = (+$("timeSlider").value) / 1000;
@@ -593,11 +653,10 @@ function onScrub() {
   if (S.reroutes) { S.reroutes = null; S.selected = null; bindReroutes(); }
   updateScrubText(); draw();                       // instant plane move
   refreshTrafficLive();                            // live other-aircraft positions
+  refreshWeatherLive();                            // live radar follows the timeline
+  if (S.windsOn) refreshWindsLive();               // live wind field follows the timeline
   clearTimeout(scrubTimer);
-  scrubTimer = setTimeout(() => {
-    fetchWeather().then(draw); refreshState();
-    if (S.windsOn) fetchWinds();                   // winds are time-dependent
-  }, 220);
+  scrubTimer = setTimeout(refreshState, 220);      // heavier sector/readout state on settle
 }
 
 // ------------- pan / zoom -------------
