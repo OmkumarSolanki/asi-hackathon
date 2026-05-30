@@ -125,6 +125,20 @@ function diamond(x, y, s, color) {
 }
 function centroid(ring) { let a = 0, b = 0; for (const p of ring) { a += p[0]; b += p[1]; } return [a / ring.length, b / ring.length]; }
 
+// Reroute line style by category. recommended = green solid, rejected
+// (enters an over-demand sector) = red dashed, viable alternate = blue dotted.
+function routeStyle(r) {
+  if (r.recommended) return { color: "rgba(46,210,170,.9)", dash: [], w: 2.4 };
+  if (r.entersOverload) return { color: "rgba(225,80,80,.7)", dash: [4, 4], w: 1.5 };
+  return { color: "rgba(110,150,200,.75)", dash: [2, 6], w: 1.5 };
+}
+// Opaque variant for the selected-route glow/highlight + destination marker.
+function routeGlow(r) {
+  if (r.recommended) return "#2ee2aa";
+  if (r.entersOverload) return "#ff6a6a";
+  return "#7fa8d8";
+}
+
 // Surface-wind vectors: an arrow per station pointing the way the wind blows
 // (wind_dir_deg is the direction it comes FROM, so we add 180°). Green under
 // 40 kt, red at/above. Length scales with speed.
@@ -215,23 +229,25 @@ function draw() {
   ctx.strokeStyle = "rgba(150,165,182,.7)"; ctx.lineWidth = 1.6 * dpr;
   ctx.setLineDash([9 * dpr, 7 * dpr]); strokeCoords(sp.remaining); ctx.setLineDash([]);
 
-  // reroutes (if computed)
+  // reroutes (if computed) — colored by category so the suggestion is obvious:
+  //   recommended = green solid · viable alternate = blue dotted · rejected = red dashed
   if (S.reroutes) {
-    ctx.lineWidth = 1.4 * dpr;
     S.reroutes.reroutes.forEach((r, i) => {
-      if (i === S.selected) return;
-      ctx.strokeStyle = r.entersOverload ? "rgba(220,70,70,.55)" : "rgba(120,140,160,.6)";
-      ctx.setLineDash(r.entersOverload ? [3 * dpr, 4 * dpr] : [2 * dpr, 6 * dpr]);
+      if (i === S.selected) return;                  // selected drawn last, on top
+      const st = routeStyle(r);
+      ctx.strokeStyle = st.color; ctx.lineWidth = st.w * dpr;
+      ctx.setLineDash(st.dash.map(d => d * dpr));
       strokeCoords(r.coords);
     });
     ctx.setLineDash([]);
     const sel = S.selected != null ? S.reroutes.reroutes[S.selected] : null;
-    if (sel) {
-      ctx.save(); ctx.strokeStyle = "#2fd6ee"; ctx.lineWidth = 3 * dpr;
-      ctx.shadowColor = "#2fd6ee"; ctx.shadowBlur = 14 * dpr; ctx.lineJoin = "round";
-      strokeCoords(sel.coords); ctx.restore();
+    if (sel) {                                        // emphasize selection in its own category color
+      const g = routeGlow(sel);
+      ctx.save(); ctx.strokeStyle = g; ctx.lineWidth = 3.4 * dpr;
+      ctx.shadowColor = g; ctx.shadowBlur = 14 * dpr; ctx.lineJoin = "round";
+      ctx.setLineDash([]); strokeCoords(sel.coords); ctx.restore();
       const d = sel.coords[sel.coords.length - 1], [dx, dy] = proj(d[0], d[1]);
-      diamond(dx, dy, 6 * dpr, "#2fd6ee");
+      diamond(dx, dy, 6 * dpr, g);
     }
   }
 
@@ -457,6 +473,7 @@ async function loadFlight() {
   if (pendingSuggest) await suggestReroutes();
   pendingTime = null; pendingSuggest = false;
   loadHotspot();   // background: find congested point + pre-warm reroute cache
+  fetchAdvisory(); // background: load the AI advisory once; it then persists
 }
 
 let stateSeq = 0;
@@ -504,7 +521,6 @@ async function suggestReroutes() {
     S.selected = ri >= 0 ? ri : (S.reroutes.reroutes.length ? 0 : null);
     bindReroutes(); draw();
   } finally { btn.disabled = false; btn.textContent = "⟳ Suggest reroutes"; }
-  fetchAdvisory();                       // ground the AI brief in the chosen reroute
 }
 
 // AI advisory bundle (brief + crowd-forecast + analogs + landing weather).
@@ -572,9 +588,9 @@ async function refreshTrafficLive() {
 let scrubTimer = null;
 function onScrub() {
   S.frac = (+$("timeSlider").value) / 1000;
-  // moving the plane invalidates any prior reroutes / advisory
+  // moving the plane invalidates any prior reroutes; the AI advisory is loaded
+  // once at page load and left in place persistently, so it is NOT cleared here.
   if (S.reroutes) { S.reroutes = null; S.selected = null; bindReroutes(); }
-  if (S.advisory) { S.advisory = null; bindAdvisory(); $("advisory").classList.add("hidden"); }
   updateScrubText(); draw();                       // instant plane move
   refreshTrafficLive();                            // live other-aircraft positions
   clearTimeout(scrubTimer);
