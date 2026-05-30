@@ -32,6 +32,7 @@ const S = {
   windsOn: false,    // wind streamlines toggle
   sectors: null,     // /api/sectors HIGH-band polygons
   sectorsOn: false,  // sector polygons layer toggle
+  weatherOn: true,   // NEXRAD radar layer toggle (on by default)
 };
 
 // ------------- wind streamlines (animated overlay canvas) -------------
@@ -360,7 +361,7 @@ function draw() {
   for (let lat = 20; lat <= 55; lat += 5) { const [, y] = proj(lat, -95); ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
 
   // weather
-  if (S.wx && S.meta.weatherExtent) {
+  if (S.weatherOn && S.wx && S.meta.weatherExtent) {
     const [ww, we, ws, wn] = S.meta.weatherExtent;
     const [x0, y0] = proj(wn, ww), [x1, y1] = proj(ws, we);
     ctx.globalAlpha = 0.92; ctx.imageSmoothingEnabled = true;
@@ -819,6 +820,12 @@ function toggleSectors() {
   $("lgSect").classList.toggle("hidden", !S.sectorsOn);
   if (S.sectorsOn && !S.sectors) fetchSectors(); else draw();
 }
+function toggleWeather() {
+  S.weatherOn = !S.weatherOn;
+  $("weatherBtn").classList.toggle("on", S.weatherOn);
+  $("wxLegend").classList.toggle("hidden", !S.weatherOn);
+  draw();
+}
 
 // ------------- scrubber -------------
 function updateScrubText() {
@@ -977,6 +984,7 @@ $("zoomOut").addEventListener("click", () => zoomAt(canvas.width / 2, canvas.hei
 $("fitBtn").addEventListener("click", () => { if (S.meta) { S.view = fitView(S.meta.extent, canvas.width, canvas.height); draw(); } });
 $("windBtn").addEventListener("click", toggleWinds);
 $("sectorBtn").addEventListener("click", toggleSectors);
+$("weatherBtn").addEventListener("click", toggleWeather);
 addEventListener("resize", resize);
 
 // ------------- "Don't Crash!" curved caption (per-char, upright smile) -------------
