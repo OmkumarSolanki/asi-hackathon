@@ -142,9 +142,51 @@ html,body{height:100%;background:var(--bg);color:var(--txt);
 .scalebar span{font-size:10px;color:var(--muted);font-family:var(--mono)}
 
 /* ---------- "Don't Crash!" badge (top-right of the sidebar) ---------- */
-#logoBadge{flex:0 0 auto;margin:-2px -2px 0 0;
-  filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))}
+#logoBadge{flex:0 0 auto;margin:-2px -2px 0 0;cursor:pointer;
+  filter:drop-shadow(0 2px 6px rgba(0,0,0,.6));transition:transform .12s}
+#logoBadge:hover{transform:scale(1.06)}
+#logoBadge:active{transform:scale(.96)}
 #logoBadge svg{display:block;width:68px;height:auto}
+
+/* ---------- "Don't Crash!" crash easter egg (full-window) ---------- */
+#crashFx{position:fixed;inset:0;z-index:99999;pointer-events:none;overflow:hidden;
+  animation:cfx-fade 3.4s forwards, cfx-shake .5s 1.25s ease-in-out}
+@keyframes cfx-fade{0%,82%{opacity:1}100%{opacity:0}}
+@keyframes cfx-shake{0%,100%{transform:translate(0,0)}
+  15%{transform:translate(-9px,7px)}30%{transform:translate(8px,-5px)}
+  45%{transform:translate(-6px,4px)}60%{transform:translate(5px,-3px)}
+  80%{transform:translate(-3px,2px)}}
+.cfx-backdrop{position:absolute;inset:0;opacity:0;animation:cfx-bg 3.4s ease-out forwards;
+  background:radial-gradient(circle at 56% 78%, rgba(70,0,0,.5), rgba(2,4,8,.74))}
+@keyframes cfx-bg{0%{opacity:0}15%,82%{opacity:1}100%{opacity:0}}
+.cfx-trail{position:absolute;width:0;height:7px;filter:blur(3px);opacity:0;transform-origin:0 50%;
+  background:linear-gradient(90deg,transparent,rgba(255,190,130,.4),rgba(255,90,60,.12));
+  animation:cfx-trail 1.45s ease-in forwards}
+@keyframes cfx-trail{0%{opacity:0}30%{opacity:.65}80%{opacity:.4}100%{opacity:0}}
+.cfx-plane{position:absolute;font-size:clamp(58px,11vw,150px);line-height:1;
+  filter:drop-shadow(0 0 10px rgba(255,255,255,.25));animation:cfx-fly 1.45s cubic-bezier(.5,.02,.9,.4) forwards}
+@keyframes cfx-fly{
+  0%{transform:translate(-50%,-50%) rotate(var(--rot)) scale(.2);opacity:0}
+  12%{transform:translate(-50%,-50%) rotate(var(--rot)) scale(1);opacity:1}
+  60%{transform:translate(calc(-50% + var(--dx)*.5),calc(-50% + var(--dy)*.5)) rotate(var(--rot)) scale(1.1);opacity:1}
+  100%{transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) rotate(calc(var(--rot) + 70deg)) scale(.5);opacity:0}}
+.cfx-boom{position:absolute;opacity:0;font-size:clamp(90px,17vw,240px);line-height:1;
+  transform:translate(-50%,-50%) scale(.2);
+  filter:drop-shadow(0 0 30px rgba(255,120,40,.85));animation:cfx-boom .75s 1.2s ease-out forwards}
+@keyframes cfx-boom{0%{opacity:0;transform:translate(-50%,-50%) scale(.2)}
+  35%{opacity:1;transform:translate(-50%,-50%) scale(1.3)}
+  100%{opacity:0;transform:translate(-50%,-50%) scale(1.7)}}
+.cfx-x{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:82vw;height:82vw;max-width:88vh;max-height:88vh}
+.cfx-x span{position:absolute;top:50%;left:0;width:100%;height:2.6vh;min-height:16px;
+  background:#ff2424;border-radius:8px;box-shadow:0 0 30px rgba(255,40,40,.95);opacity:0;
+  transform-origin:center}
+.cfx-x span:nth-child(1){animation:cfx-x1 .45s 1.75s cubic-bezier(.2,1.3,.4,1) forwards}
+.cfx-x span:nth-child(2){animation:cfx-x2 .45s 2.0s cubic-bezier(.2,1.3,.4,1) forwards}
+@keyframes cfx-x1{from{opacity:0;transform:translateY(-50%) rotate(45deg) scaleX(0)}
+  to{opacity:1;transform:translateY(-50%) rotate(45deg) scaleX(1)}}
+@keyframes cfx-x2{from{opacity:0;transform:translateY(-50%) rotate(-45deg) scaleX(0)}
+  to{opacity:1;transform:translateY(-50%) rotate(-45deg) scaleX(1)}}
 .badge-cap{font-family:var(--sans);font-size:15px;font-weight:800;
   letter-spacing:.5px;fill:#e02323}
 

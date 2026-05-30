@@ -964,7 +964,34 @@ $("fitBtn").addEventListener("click", () => { if (S.meta) { S.view = fitView(S.m
 $("windBtn").addEventListener("click", toggleWinds);
 $("sectorBtn").addEventListener("click", toggleSectors);
 $("weatherBtn").addEventListener("click", toggleWeather);
+$("logoBadge").addEventListener("click", playCrashAnim);
 addEventListener("resize", resize);
+
+// ------------- "Don't Crash!" easter egg -------------
+// Click the badge: a plane nose-dives and crashes full-window, then a big red X
+// slashes through it — i.e. DON'T crash.
+function playCrashAnim() {
+  if (document.getElementById("crashFx")) return;   // one at a time
+  // Launch the plane from the badge's current on-screen position.
+  const r = document.getElementById("logoBadge").getBoundingClientRect();
+  const bx = r.left + r.width / 2, by = r.top + r.height / 2;
+  const tx = innerWidth * 0.45, ty = innerHeight * 0.86;   // crash point (lower-center)
+  const dx = tx - bx, dy = ty - by;
+  const dist = Math.hypot(dx, dy), ang = Math.atan2(dy, dx) * 180 / Math.PI;
+  const fx = document.createElement("div");
+  fx.id = "crashFx";
+  fx.innerHTML =
+    '<div class="cfx-backdrop"></div>' +
+    `<div class="cfx-trail" style="left:${bx}px;top:${by}px;width:${dist}px;transform:rotate(${ang}deg)"></div>` +
+    `<div class="cfx-plane" style="left:${bx}px;top:${by}px;--dx:${dx}px;--dy:${dy}px;--rot:${ang + 45}deg">✈️</div>` +
+    `<div class="cfx-boom" style="left:${tx}px;top:${ty}px">💥</div>` +
+    '<div class="cfx-x"><span></span><span></span></div>';
+  document.body.appendChild(fx);
+  fx.addEventListener("animationend", e => {
+    if (e.animationName === "cfx-fade") fx.remove();   // last animation to finish
+  });
+  setTimeout(() => fx.remove(), 4000);                  // safety net
+}
 
 // ------------- "Don't Crash!" curved caption (per-char, upright smile) -------------
 function buildLogoCaption() {
