@@ -1,77 +1,70 @@
-# Demo — WX Advisory
+# Demo — Don't Crash! Course-Corrections Cockpit
 
-3-minute walk-through. Hero scenario: **2025-07-14T22:35Z** — peak summer convection across the Midwest/Plains.
+~3-minute walk-through. Good hero flight: **SWA3209 KIND→KMCO** on **2025-07-08**
+around **22:00Z** — it threads a saturated HIGH sector and convection en route, so
+every feature lights up.
 
 ## Pre-flight (60s before)
-- Backend up: `cd backend && source .venv/bin/activate && uvicorn app.main:app --port 8000`
-- Frontend up: `cd frontend && npm run dev`
-- Browser at `http://localhost:5173`
-- Hero scenario should auto-load. Time scrubber at `21:52Z`.
+- One server: `./start.sh` (or `.venv/bin/python webapp.py`).
+- Browser at `http://127.0.0.1:5000/?flight=SWA3209&date=2025-07-08&time=2025-07-08T22:00`
+- The flight auto-loads and the scrubber starts near 22:00Z.
+- (First advisory builds the analog cache once — warm it before the demo by clicking
+  **Suggest reroutes** on this flight beforehand.)
 
 ## Demo script
 
 ### 0:00 — 0:25 · Set the stage
-> "We're looking at every commercial flight over CONUS at 9:52 PM Eastern on July 14, 2025. The orange-and-red mesh is real HRRR weather radar. Those are the convective storms our 14,000 flights have to deal with."
+> "Every commercial flight over CONUS at this moment. The orange-and-red mesh is
+> NEXRAD-style radar. Drag the timeline — the aircraft and surrounding traffic move
+> live, and the storms advance. Our flight, SWA3209, is heading into it."
 
-Action: open browser. Pan map to Midwest. Drag time scrubber forward a couple frames — let judges see the storm advance.
+Action: drag the scrubber a few frames; pan/zoom the map.
 
-### 0:25 — 0:50 · The WX Hotlist
-> "Tyler told us pilots want a tool that says 'here's what's going to break, and what to do about it.' Top-left, our WX Hotlist: 8 aircraft are flying planned routes straight into convection right now. The one at the top — SWA2101 from Kansas City to New Orleans — has the worst encounter: 276 dBZ peak. Let's brief that one."
+### 0:25 — 0:55 · Route planning (haxney engine)
+> "Hit Suggest reroutes. We run an A\* search from the aircraft's current position
+> that avoids storms forecast over the next 30 minutes and sectors already at
+> capacity, then score each option on distance, weather severity, and sector
+> overload. The recommended detour is highlighted; rejected ones that cross a
+> saturated sector are drawn dashed-red."
 
-Action: click `SWA2101` in the WX Hotlist (amber pulse).
+Action: click **⟳ Suggest reroutes**. Click a card to expand fuel/time deltas.
 
-### 0:50 — 1:30 · The Advisory
-> "Right-side panel — we hand-off to the cockpit advisory channel. Hit Request Advisory."
+### 0:55 — 1:40 · The AI Advisory
+> "As soon as we have a recommendation, the ADVISORY card briefs the cockpit. The
+> brief is written by Claude — but every number is real: it comes from the same
+> structured payload we computed, so it can't make things up."
 
-Action: click **Request Advisory**.
+Action: read the ◆ ADVISORY brief aloud (5–7 ATC-style lines), point out the
+CONF rating.
 
-> "What just happened: we generated 7 candidate trajectories, sampled the weather grid along each one, checked every sector capacity along the path, ran an A* search to avoid storms, scored fuel and time deltas with the OpenAP model, pulled the destination's historical METAR, and called Claude to write the brief. About 2 seconds."
+### 1:40 — 2:20 · Crowd-Forecast
+> "Under the brief: the crowd-forecast signal. STRONG NO — hundreds of nearby
+> flights have *filed* routes that detour around this weather. The airlines' own
+> dispatch systems already voted it's dangerous, and we surface that vote to the
+> cockpit."
 
-> "Recommendation: South Arc. Fuel impact plus 287 pounds, time impact actually minus 22 minutes — south arc benefits from upper-level winds. Confidence: HIGH."
+Action: point to the CROWD-FORECAST verdict + headline in the advisory card.
 
-> "Below that, the voice brief. ATC-style, first-person — meant to be read aloud."
+### 2:20 — 2:45 · Historical analogs
+> "Below that, HISTORICAL ANALOGS. We replayed every flight in every scenario and
+> logged each hazardous weather encounter as a synthetic PIREP. For this cell we do
+> k-NN over the weather signature and return the closest past matches — real
+> grounding for the brief."
 
-Action: let the briefing breathe for 3-4 seconds.
+### 2:45 — 3:00 · Winds + landing, then close
+> "Top-right WIND toggle overlays surface winds — green calm, red ≥40 kt. And the
+> destination strip shows live landing weather at KMCO: wind, gusts, crosswind,
+> any warnings. One pilot, one call, ten seconds."
 
-### 1:30 — 2:05 · Options + Rejections
-> "Switch to Options. Three viable. Then — and this is the part engineers will care about — we surface what we considered and rejected. Hard Right and Deviate 20 Right hit sector LOW_345 at 102% capacity. We won't recommend them. Notice the dashed red lines on the map — those are the rejections drawn in. Pilots and dispatchers see why we said no, not just what we said yes to."
-
-Action: click **Options** tab. Hover over each option (highlight).
-
-### 2:05 — 2:35 · The Killer Tab — Crowd
-> "This is what no one else has. Switch to Crowd."
-
-Action: click **Crowd**.
-
-> "STRONG NO. 159 of 170 nearby flights have filed routes that detour around this storm — median offset 52 nautical miles. The airlines' own dispatch systems have already voted that this is dangerous. We're surfacing that vote to the cockpit."
-
-> "Tyler asked us 'what happened to the last people who went through this?' This is the closest honest answer the data lets us give: not what they did after the fact — but what their flight plans say about whether they were willing to risk it. That's the crowd-forecast signal."
-
-### 2:35 — 2:55 · Archive
-> "Last tab: Archive. We replayed all 11 scenarios in our bundle, logged every flight's weather encounter as a synthetic PIREP record — 12,000+ encounters. For any new weather query, we do k-NN over the weather signature and return the closest historical analogs. Real grounding for the Claude brief, not made-up numbers."
-
-Action: click **Archive**. Show analog count + top matches.
-
-### 2:55 — 3:00 · Close
-> "One pilot. One call. Ten seconds. Multiplied across 45,000 daily flights, that's the 90 million minutes of delay we'd start chipping at."
+Action: toggle **WIND**; point to the DEST WX strip (top-left).
 
 ## Backup plays (if something breaks)
-
-- **Backend timeout on Advise:** Reload page, pick a simpler flight from the hotlist (lower row).
-- **Map doesn't render WX:** Toggle WX layer off and on in the time scrubber.
-- **Claude API rate-limit:** Brief text falls back to a deterministic generator. Demo still works.
-- **Internet down (no METAR):** Landing-weather strip just hides. Rest of UI unaffected.
-
-## Hero flight roster (in order of demo preference)
-
-1. **SWA2101** KMCI→KMSY, 1 encounter, 276 dBZ peak — the primary
-2. **ASA517** KFLL→KSEA, 2 encounters, 210 dBZ — solid backup
-3. **UCA4290** KTUL→KIAH, 2 encounters, 204 dBZ — third option
+- **Claude rate-limit / no key:** the brief falls back to deterministic text — demo still works.
+- **Internet down (no METAR):** winds fall back to a synthetic field; the landing strip shows "NO DATA". Everything else is offline-capable (bundled basemap).
+- **First advisory is slow:** it's building the analog cache — warm it once before the demo.
 
 ## Phrases worth memorizing
-
-- "We hand-off to the cockpit advisory channel."
-- "The airlines' own dispatch systems have already voted."
-- "We're surfacing the vote to the cockpit."
+- "A\* around the storms it's about to reach, and around full sectors."
+- "Every number in the brief is real — Claude writes the words, not the data."
+- "The airlines' own dispatch systems already voted."
 - "Real grounding for the brief, not made-up numbers."
-- "One pilot. One call. Ten seconds."

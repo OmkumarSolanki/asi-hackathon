@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Don't Crash! — Course Corrections</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<canvas id="map"></canvas>
+
+<!-- "Don't Crash!" badge (logo + curved caption) -->
+<div id="logoBadge" title="Don't Crash!">
+  <svg viewBox="0 0 124 148" width="108" height="129" aria-label="Don't Crash!">
+    <defs>
+      <clipPath id="circClip"><circle cx="62" cy="56" r="50"/></clipPath>
+    </defs>
+    <circle cx="62" cy="56" r="53" fill="#0a0f17" stroke="rgba(120,160,200,.25)" stroke-width="1.5"/>
+    <image href="/static/logo.jpg" x="12" y="6" width="100" height="100" clip-path="url(#circClip)"/>
+    <g id="capGroup" class="badge-cap"></g>
+  </svg>
+</div>
+
+<!-- Top-center: flight / date picker -->
+<div id="picker">
+  <div class="pk-field"><label>DATE</label>
+    <select id="dateSel"></select></div>
+  <div class="pk-field"><label>FLIGHT</label>
+    <input id="flightInput" list="flightList" placeholder="e.g. SWA3209" autocomplete="off">
+    <datalist id="flightList"></datalist></div>
+  <button id="loadBtn">LOAD</button>
+  <span id="pickerMsg" class="pk-msg"></span>
+</div>
+
+<!-- Top-left: flight info + SIGMET -->
+<section id="flightCard" class="card">
+  <header class="fc-head">
+    <span id="fcCallsign" class="fc-callsign">—</span>
+    <span id="fcSub" class="fc-sub"></span>
+  </header>
+  <div class="fc-grid">
+    <div><label>ALT</label><span id="fcAlt">—</span></div>
+    <div><label>GS</label><span id="fcGs">—</span></div>
+    <div><label>HDG</label><span id="fcHdg">—</span></div>
+    <div><label>NEXT FIX</label><span id="fcFix">—</span></div>
+    <div><label>ETA</label><span id="fcEta">—</span></div>
+    <div><label>FUEL</label><span id="fcFuel">—</span></div>
+  </div>
+</section>
+<section id="sigmet" class="sigmet hidden">
+  <div class="sg-title">⚠ <span id="sgId">CONVECTIVE SIGMET</span></div>
+  <div class="sg-body" id="sgBody"></div>
+</section>
+
+<!-- Destination landing weather (METAR) -->
+<section id="landingStrip" class="card landing hidden">
+  <div class="ls-head">DEST WX · <span id="lsIcao">—</span>
+    <span id="lsState" class="ls-state">—</span></div>
+  <div id="lsBody" class="ls-body">—</div>
+  <div id="lsWarn" class="ls-warn hidden"></div>
+</section>
+
+<!-- Top-right: map controls -->
+<div id="controls">
+  <div class="ctl compass" title="North up"><div class="needle">▲</div><span>N</span></div>
+  <div class="ctl btn" id="zoomIn">+</div>
+  <div class="ctl btn" id="zoomOut">−</div>
+  <div class="ctl btn" id="fitBtn" title="Fit route">⤢</div>
+  <div class="ctl btn toggle" id="windBtn" title="Toggle surface winds">WIND</div>
+  <div class="ctl readout"><label>NOWCAST</label><span id="nowcast">+0:00</span></div>
+  <div class="ctl readout"><label>RADAR ALT</label><span id="radarAlt">—</span></div>
+</div>
+
+<!-- Right: course corrections -->
+<aside id="panel">
+  <div class="panel-head">
+    <h1>COURSE CORRECTIONS</h1>
+    <span id="panelCount" class="panel-count">—</span>
+  </div>
+  <p class="panel-sub">Reroutes ranked by added fuel burn</p>
+
+  <!-- AI advisory: briefing + crowd-forecast + historical analogs -->
+  <div id="advisory" class="advisory hidden">
+    <div class="adv-head">
+      <span class="adv-title">◆ ADVISORY</span>
+      <span id="advConf" class="adv-conf">—</span>
+    </div>
+    <div id="advBrief" class="adv-brief">—</div>
+    <div id="advCrowd" class="adv-crowd hidden">
+      <div class="adv-row"><span class="adv-label">CROWD-FORECAST</span>
+        <span id="advVerdict" class="adv-verdict">—</span></div>
+      <div id="advCrowdLine" class="adv-detail">—</div>
+    </div>
+    <div id="advAnalogs" class="adv-analogs hidden">
+      <div class="adv-row"><span class="adv-label">HISTORICAL ANALOGS</span>
+        <span id="advAnalogCount" class="adv-count">—</span></div>
+      <div id="advAnalogLine" class="adv-detail">—</div>
+    </div>
+  </div>
+
+  <div id="filedCard" class="filed-card">
+    <div class="filed-top"><span class="lbl">FILED · DIRECT</span>
+      <span id="filedBadges" class="badges"></span></div>
+    <div id="filedName" class="filed-name">—</div>
+  </div>
+
+  <div id="rerouteHint" class="rr-hint">
+    Scrub to a point on the route, then <b>Suggest reroutes</b> to evaluate
+    weather- and sector-aware alternatives from there.
+  </div>
+  <div id="rerouteList"></div>
+</aside>
+
+<!-- Bottom-center: time scrubber + suggest button -->
+<div id="scrubber">
+  <div class="sc-row">
+    <span id="scTakeoff" class="sc-end">—</span>
+    <div class="sc-slider-wrap">
+      <input id="timeSlider" class="sc-slider" type="range" min="0" max="1000" value="0">
+      <div id="scMarker" class="sc-marker hidden" title="Congestion ahead — reroutes pre-computed"></div>
+    </div>
+    <span id="scLanding" class="sc-end">—</span>
+  </div>
+  <div class="sc-row2">
+    <span class="sc-now">T <span id="scNow">—</span> · <span id="scPct">0%</span> en route</span>
+    <button id="suggestBtn" class="suggest-btn">⟳ Suggest reroutes</button>
+  </div>
+</div>
+
+<!-- Bottom-left: weather legend + scale -->
+<div id="wxLegend" class="legend">
+  <label>RADAR REFLECTIVITY · dBZ</label>
+  <div class="wx-bar"></div>
+  <div class="wx-ticks"><span>15</span><span>30</span><span>40</span><span>50</span><span>60+</span></div>
+  <div class="scalebar"><div class="sb-line"></div><span id="scaleLabel">100 nm</span></div>
+</div>
+
+<!-- Bottom-right: map legend + status -->
+<div id="mapLegend" class="legend right">
+  <span class="lg-item"><i class="swatch reco"></i>Recommended</span>
+  <span class="lg-item"><i class="swatch filed"></i>Filed route</span>
+  <span class="lg-item"><i class="swatch alt"></i>Alternates</span>
+  <span class="lg-item"><i class="swatch traffic">✈</i>Traffic</span>
+  <span id="lgWind" class="lg-item hidden"><i class="swatch wind">↗</i>Winds (kt)</span>
+  <span class="lg-status"><i class="dot"></i><span id="statusText">Live · NEXRAD mosaic</span></span>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

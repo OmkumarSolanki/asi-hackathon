@@ -1,26 +1,18 @@
 #!/usr/bin/env bash
-# Launch both servers for the demo. Ctrl-C kills both.
+# Launch the "Don't Crash!" cockpit dashboard (single Flask app). Ctrl-C stops it.
 set -e
 cd "$(dirname "$0")"
 
-echo "==> WX Advisory — starting backend + frontend"
-echo
+PORT="${PORT:-5000}"
+echo "==> Don't Crash! — starting cockpit dashboard"
 
-# Kill anything on our ports first
-lsof -ti:8000 | xargs kill -9 2>/dev/null || true
-lsof -ti:5173 | xargs kill -9 2>/dev/null || true
+# Free the port if something is already on it.
+lsof -ti:"$PORT" | xargs kill -9 2>/dev/null || true
 
-(cd backend && source .venv/bin/activate && uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload) &
-BACKEND_PID=$!
+# Prefer the project venv if present; fall back to system python.
+PY="python3"
+[ -x ".venv/bin/python" ] && PY=".venv/bin/python"
 
-(cd frontend && npm run dev) &
-FRONTEND_PID=$!
-
-trap "kill $BACKEND_PID $FRONTEND_PID 2>/dev/null" EXIT INT TERM
-
-echo
-echo "==> Backend  → http://127.0.0.1:8000"
-echo "==> Frontend → http://localhost:5173"
-echo
+echo "==> http://127.0.0.1:${PORT}"
 echo "Press Ctrl-C to stop."
-wait
+PORT="$PORT" exec "$PY" webapp.py
