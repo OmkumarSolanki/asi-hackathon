@@ -357,9 +357,7 @@ const setHtml = (id, h) => { $(id).innerHTML = h; };
 function bindMeta() {
   const f = S.meta.flight;
   setText("fcCallsign", f.callsign);
-  setText("fcSub", `${f.type} · ${f.origin}→${f.dest}`);
-  setText("fcAlt", f.altFL);
-  setHtml("fcGs", `${f.gsKt}<small>kt</small>`);
+  setText("fcSub", `${f.origin}→${f.dest}`);
   setText("nowcast", `+${Math.floor(S.meta.nowcastMin)}:00`);
   setText("radarAlt", S.meta.radarAlt);
   setText("scTakeoff", S.meta.takeoffZ + "z");
@@ -367,11 +365,6 @@ function bindMeta() {
 }
 function bindState() {
   const st = S.state; if (!st) return;
-  const r = st.readouts;
-  setText("fcHdg", String(r.hdg).padStart(3, "0") + "°");
-  setText("fcFix", r.nextFix);
-  setHtml("fcEta", `${r.etaZ}<small>z</small>`);
-  setHtml("fcFuel", r.fuelText.replace(/ lb$/, "<small> lb</small>"));
   setText("scNow", st.nowZ + "z");
   // SIGMET
   const sg = $("sigmet");

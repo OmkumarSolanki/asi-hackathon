@@ -27,8 +27,7 @@ html,body{height:100%;background:var(--bg);color:var(--txt);
 /* ---------- Flight card ---------- */
 #flightCard{position:fixed;top:18px;left:18px;width:288px;background:var(--panel);
   border:1px solid var(--line);border-radius:10px;padding:14px 16px;z-index:5}
-.fc-head{display:flex;align-items:baseline;gap:10px;border-bottom:1px solid var(--line);
-  padding-bottom:10px;margin-bottom:10px}
+.fc-head{display:flex;align-items:baseline;gap:10px}
 .fc-callsign{font-size:22px;font-weight:700;letter-spacing:.5px}
 .fc-sub{font-size:11px;color:var(--muted);font-family:var(--mono);letter-spacing:.5px}
 .fc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px 8px}
@@ -38,7 +37,7 @@ html,body{height:100%;background:var(--bg);color:var(--txt);
 .fc-grid span small{font-size:10.5px;color:var(--muted);font-weight:500;margin-left:1px}
 
 /* ---------- SIGMET ---------- */
-.sigmet{position:fixed;top:312px;left:18px;width:288px;background:rgba(40,28,8,.85);
+.sigmet{position:fixed;top:208px;left:18px;width:288px;background:rgba(40,28,8,.85);
   border:1px solid rgba(240,169,58,.5);border-left:3px solid var(--amber);
   border-radius:8px;padding:10px 12px;z-index:5}
 .sg-title{color:var(--amber);font-size:11.5px;font-weight:700;letter-spacing:.6px;
@@ -215,7 +214,7 @@ html,body{height:100%;background:var(--bg);color:var(--txt);
 .ctl.btn.toggle.on{color:#04222b;background:var(--cyan);border-color:var(--cyan)}
 
 /* ---------- Destination landing weather ---------- */
-#landingStrip{position:fixed;top:200px;left:18px;width:288px;background:var(--panel);
+#landingStrip{position:fixed;top:96px;left:18px;width:288px;background:var(--panel);
   border:1px solid var(--line);border-left:3px solid var(--cyan-dim);border-radius:8px;
   padding:10px 12px;z-index:5}
 .ls-head{display:flex;align-items:center;gap:8px;font-size:10px;letter-spacing:.8px;
