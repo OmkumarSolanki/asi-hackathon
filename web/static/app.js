@@ -327,6 +327,31 @@ function draw() {
   drawPlane(px, py, 9 * dpr, sp.hdg, "#2fd6ee", true);
 
   updateScaleBar();
+  updateFuel();
+}
+
+// Cumulative fuel tracker. Fuel = distance × aircraft burn rate (lb/nm). Uses the
+// ACTIVE path (filed + any accepted reroutes), so detours raise the totals, and
+// each field shows the extra vs what the filed route would have used by this time.
+function fmtLb(lb) {
+  return lb >= 1000 ? (lb / 1000).toFixed(lb >= 9950 ? 0 : 1) + "k" : String(Math.round(lb));
+}
+function fuelDelta(d) {
+  if (Math.abs(d) < 50) return "";
+  const cls = d > 0 ? "up" : "down";
+  return ` <span class="fd ${cls}">${d > 0 ? "+" : "−"}${fmtLb(Math.abs(d))}</span>`;
+}
+function updateFuel() {
+  if (!S.meta) return;
+  const burn = S.meta.fuelPerNm || 0;
+  const sp = activeSplit(S.frac);                       // actual path being flown
+  const filed = splitAt(S.meta.filed, S.frac);          // filed baseline at the same time
+  const used = lineLen(sp.flown) * burn, rem = lineLen(sp.remaining) * burn;
+  const dUsed = used - lineLen(filed.flown) * burn;
+  const dRem = rem - lineLen(filed.remaining) * burn;
+  setHtml("fuelUsed", `${fmtLb(used)}<small> lb</small>${fuelDelta(dUsed)}`);
+  setHtml("fuelRem", `${fmtLb(rem)}<small> lb</small>${fuelDelta(dRem)}`);
+  setHtml("fuelTotal", `${fmtLb(used + rem)}<small> lb</small>${fuelDelta(dUsed + dRem)}`);
 }
 
 function updateScaleBar() {

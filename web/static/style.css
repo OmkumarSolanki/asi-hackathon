@@ -193,6 +193,15 @@ html,body{height:100%;background:var(--bg);color:var(--txt);
 .rr-hint{font-size:11.5px;color:var(--muted);line-height:1.5;padding:6px 2px}
 .rr-hint b{color:var(--cyan)}
 
+/* ---------- Cumulative fuel tracker (in the scrubber) ---------- */
+.sc-fuel{display:flex;gap:18px;margin-top:10px;padding-top:9px;border-top:1px solid var(--line)}
+.fuel-item{display:flex;flex-direction:column;gap:2px}
+.fuel-item label{font-size:8.5px;letter-spacing:.8px;color:var(--muted2)}
+.fuel-item>span{font-size:14px;font-weight:600;font-family:var(--mono);white-space:nowrap}
+.fuel-item>span small{font-size:9px;color:var(--muted);font-weight:500;margin-left:1px}
+.fd{font-size:10px;font-weight:700}
+.fd.up{color:var(--amber)} .fd.down{color:var(--green)}
+
 #mapLegend.right{right:372px;display:flex;align-items:center;gap:16px}
 .lg-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
 .swatch{width:18px;height:0;border-top:3px solid;display:inline-block}
