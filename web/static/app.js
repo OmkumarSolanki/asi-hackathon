@@ -542,11 +542,33 @@ function bindReroutes() {
   setText("filedName", S.reroutes.filed.name);
   setText("panelCount", S.reroutes.count);
   list.innerHTML = "";
+  list.appendChild(origCard(S.reroutes.filed));     // original route, for comparison
   if (S.reroutes.count === 0) {
-    list.innerHTML = `<div class="rr-hint">No reroute needed — the filed track is clear from here.</div>`;
+    list.insertAdjacentHTML("beforeend",
+      `<div class="rr-hint">No reroute needed — the filed track is clear from here.</div>`);
     return;
   }
   S.reroutes.reroutes.forEach((r, i) => list.appendChild(rrCard(r, i)));
+}
+// The original/filed route as a non-selectable baseline card, so the alternates
+// below can be compared against it (same dBZ / severity / aircraft columns).
+function origCard(f) {
+  const el = document.createElement("div");
+  el.className = "rr orig";
+  el.innerHTML = `
+    <div class="rr-row">
+      <span class="rr-idx">··</span>
+      <span class="rr-name">ORIGINAL</span>
+      <span class="rr-orig-badge">ON PLAN</span>
+      <span class="rr-fuel">${f.distNm} nm</span>
+    </div>
+    <div class="rr-meta">
+      <span class="sw" style="background:${dbzColor(f.worstDbz)}"></span>
+      <span>${f.worstDbz} dBZ</span>
+      <span class="rr-tag ${tagClass(f.sevLabel)}">${f.sevLabel}</span>
+      <span style="margin-left:auto">${f.aircraft != null ? f.aircraft : "—"} aircraft</span>
+    </div>`;
+  return el;
 }
 
 function bindLanding() {
@@ -595,7 +617,7 @@ function rrCard(r, i) {
       <span class="sw" style="background:${dbzColor(r.worstDbz)}"></span>
       <span>${r.worstDbz} dBZ</span>
       <span class="rr-tag ${tagClass(r.sevLabel)}">${r.sevLabel}</span>
-      <span style="margin-left:auto">${r.aircraft} ac</span>
+      <span style="margin-left:auto">${r.aircraft} aircraft</span>
     </div>
     ${r.entersOverload ? '<div class="rr-over">✗ enters over-demand sector</div>' : ""}
     <div class="rr-detail">

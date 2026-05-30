@@ -455,7 +455,8 @@ def reroutes_compute(flight_number, date, time_arg, start_override=None, baselin
 
     result = {
         "filed": {"name": fix_name(*dest_ll), "worstDbz": round(filed_dbz),
-                  "sevLabel": severity_label(filed_dbz), "distNm": round(baseline)},
+                  "sevLabel": severity_label(filed_dbz), "distNm": round(baseline),
+                  "aircraft": traffic_on_path(remaining[0], remaining[1], traffic)},
         "reroutes": out, "count": len(out),
         "remainingNm": round(remaining_nm),
     }
