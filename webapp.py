@@ -389,24 +389,42 @@ def traffic_only(flight_number, date, time_arg):
             "nowZ": ct.strftime("%H:%M")}, 200
 
 
-def reroutes_compute(flight_number, date, time_arg):
+def reroutes_compute(flight_number, date, time_arg, start_override=None, baseline_override=None):
+    """Evaluate A* reroutes from the aircraft's current position to the destination.
+
+    By default the position + baseline (the "on plan" remaining route) come from
+    the filed route. When the user has already accepted a reroute and scrubbed
+    along it, the client passes ``start_override`` (current lat/lon) and
+    ``baseline_override`` ((lats, lons) of the remaining selected route) so new
+    reroutes branch off the route actually being flown, not the filed one.
+    """
     ctx, err = _resolve(flight_number, date, time_arg)
     if err:
         return err
     f, ct = ctx["flight"], ctx["ct"]
-    # Cache A* results by (flight, date, minute) so re-display / revisits are instant.
+    override = start_override is not None and baseline_override is not None
+    # Cache filed-based A* results by (flight, date, minute) so revisits / the
+    # hotspot pre-warm are instant. Override requests are position-specific and
+    # not cached.
     cache_key = (f["flight_number"], date, ct.strftime("%Y-%m-%dT%H:%M"))
-    with _CACHE_LOCK:
-        if cache_key in _REROUTE_CACHE:
-            return _REROUTE_CACHE[cache_key], 200
+    if not override:
+        with _CACHE_LOCK:
+            if cache_key in _REROUTE_CACHE:
+                return _REROUTE_CACHE[cache_key], 200
     flights = ctx["payload"]["flights"]
     lats, lons = f["lats"], f["lons"]
     cruise = f.get("cruise_altitude_ft") or 0
     speed = f.get("cruise_speed_kt") or 450
 
-    frac = dc.flight_fraction(f, ct)
-    plat, plon, heading, flown, remaining = dc.split_at_fraction(lats, lons, frac)
-    dest_ll = (lats[-1], lons[-1])
+    if override:
+        plat, plon = start_override
+        remaining = (np.asarray(baseline_override[0], dtype=float),
+                     np.asarray(baseline_override[1], dtype=float))
+        dest_ll = (float(remaining[0][-1]), float(remaining[1][-1]))
+    else:
+        frac = dc.flight_fraction(f, ct)
+        plat, plon, heading, flown, remaining = dc.split_at_fraction(lats, lons, frac)
+        dest_ll = (lats[-1], lons[-1])
     remaining_nm = dc.polyline_length_nm(remaining[0], remaining[1])
 
     refc = dc.load_wx_matrix(ctx["sd"], ct, "refc")
@@ -487,8 +505,9 @@ def reroutes_compute(flight_number, date, time_arg):
         "reroutes": out, "count": len(out),
         "remainingNm": round(remaining_nm),
     }
-    with _CACHE_LOCK:
-        _REROUTE_CACHE[cache_key] = result
+    if not override:
+        with _CACHE_LOCK:
+            _REROUTE_CACHE[cache_key] = result
     return result, 200
 
 
@@ -736,11 +755,19 @@ def api_traffic():
     return jsonify(_native(data)), status
 
 
-@app.route("/api/reroutes")
+@app.route("/api/reroutes", methods=["GET", "POST"])
 def api_reroutes():
+    start_override = baseline_override = None
+    if request.method == "POST":
+        body = request.get_json(silent=True) or {}
+        rem = body.get("remaining")
+        if body.get("lat") is not None and rem:
+            start_override = (float(body["lat"]), float(body["lon"]))
+            baseline_override = ([p[0] for p in rem], [p[1] for p in rem])
     data, status = reroutes_compute(request.args.get("flight", ""),
                                     request.args.get("date", ""),
-                                    request.args.get("time", ""))
+                                    request.args.get("time", ""),
+                                    start_override, baseline_override)
     return jsonify(_native(data)), status
 
 

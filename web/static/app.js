@@ -18,6 +18,8 @@ const S = {
   selected: null,    // selected reroute index
   rerouteFrac: null, // frac at which reroutes were evaluated (plane follows the
                      // selected route past this point)
+  committedPath: null, // actual flown polyline up to rerouteFrac (filed + any
+                       // earlier accepted reroutes); null = filed route
   frac: 0,           // scrub position 0..1
   view: null,        // [w,e,s,n]
   wx: null,          // weather Image
@@ -73,15 +75,20 @@ function splitAt(coords, frac) {
 function activeSplit(frac) {
   const selR = (S.reroutes && S.selected != null && S.rerouteFrac != null)
     ? S.reroutes.reroutes[S.selected] : null;
-  if (!selR || frac <= S.rerouteFrac) return splitAt(S.meta.filed, frac);
+  if (!selR) return splitAt(S.meta.filed, frac);
   const df = S.rerouteFrac;
+  // Path actually flown up to the decision point: the committed trajectory if we
+  // have already accepted a reroute, else the filed route up to df.
+  const committed = S.committedPath || splitAt(S.meta.filed, df).flown;
+  if (frac <= df) {                                       // before the decision: on the committed path
+    const sp = splitAt(committed, df > 0 ? frac / df : 1);
+    return { lat: sp.lat, lon: sp.lon, hdg: sp.hdg, flown: sp.flown,
+             remaining: sp.remaining.slice(0, -1).concat(selR.coords) };
+  }
   const rsp = splitAt(selR.coords, (frac - df) / Math.max(1e-6, 1 - df));
-  const filedFlown = splitAt(S.meta.filed, df).flown;     // filed up to the decision point
-  return {
-    lat: rsp.lat, lon: rsp.lon, hdg: rsp.hdg,
-    flown: filedFlown.slice(0, -1).concat(rsp.flown),
-    remaining: rsp.remaining,
-  };
+  return { lat: rsp.lat, lon: rsp.lon, hdg: rsp.hdg,
+           flown: committed.slice(0, -1).concat(rsp.flown),
+           remaining: rsp.remaining };
 }
 
 // ------------- projection / view -------------
@@ -519,7 +526,7 @@ async function loadFlight() {
   const meta = await res.json();
   if (meta.error) { setText("pickerMsg", meta.error); return; }
   S.meta = meta; S.reroutes = null; S.selected = null; S.rerouteFrac = null; S.frac = 0;
-  S.advisory = null; S.winds = null;
+  S.committedPath = null; S.advisory = null; S.winds = null;
   $("advisory").classList.add("hidden"); $("landingStrip").classList.add("hidden");
   // Optional deep-link: start at a given time (and optionally auto-suggest).
   if (pendingTime) {
@@ -581,12 +588,27 @@ async function jumpToHotspot(h) {
 async function suggestReroutes() {
   if (!S.meta) return;
   const btn = $("suggestBtn"); btn.disabled = true; btn.textContent = "⟳ Evaluating…";
+  const reqFrac = S.frac;
   const t = timeIso();
+  const url = `/api/reroutes?flight=${encodeURIComponent(S.flight)}&date=${S.date}&time=${encodeURIComponent(t)}`;
+  // If already flying a selected reroute, branch the new options off the current
+  // position along THAT route (server gets our position + remaining as baseline).
+  const following = S.reroutes && S.selected != null && S.rerouteFrac != null && reqFrac > S.rerouteFrac;
+  const sp = following ? activeSplit(reqFrac) : null;
   try {
-    const res = await fetch(`/api/reroutes?flight=${encodeURIComponent(S.flight)}&date=${S.date}&time=${encodeURIComponent(t)}`);
+    const res = following
+      ? await fetch(url, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            lat: sp.lat, lon: sp.lon,
+            remaining: sp.remaining.map(c => [+c[0].toFixed(4), +c[1].toFixed(4)]),
+          }),
+        })
+      : await fetch(url);
     S.reroutes = await res.json();
-    S.rerouteFrac = S.frac;                 // plane follows the selected route past here
-    let ri = S.reroutes.reroutes.findIndex(r => r.recommended);
+    S.committedPath = following ? sp.flown : null;   // lock in the path flown so far
+    S.rerouteFrac = reqFrac;                          // plane follows the new selection past here
+    const ri = S.reroutes.reroutes.findIndex(r => r.recommended);
     S.selected = ri >= 0 ? ri : (S.reroutes.reroutes.length ? 0 : null);
     bindReroutes(); draw();
   } finally { btn.disabled = false; btn.textContent = "⟳ Suggest reroutes"; }
@@ -682,7 +704,7 @@ function onScrub() {
   // Keep the reroutes while one is selected so the plane can follow it as you
   // scrub; otherwise a scrub invalidates the position-specific suggestions.
   // The AI advisory is loaded once at page load and left in place persistently.
-  if (S.reroutes && S.selected == null) { S.reroutes = null; S.rerouteFrac = null; bindReroutes(); }
+  if (S.reroutes && S.selected == null) { S.reroutes = null; S.rerouteFrac = null; S.committedPath = null; bindReroutes(); }
   updateScrubText(); draw();                       // instant plane move
   refreshTrafficLive();                            // live other-aircraft positions
   refreshWeatherLive();                            // live radar follows the timeline
