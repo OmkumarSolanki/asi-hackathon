@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dont-crash"
+version = "0.2.0"
+description = "Weather/sector-aware flight rerouting cockpit — haxney UI + route planning, with AI briefing, crowd-forecast, PIREP analogs, METAR and winds."
+requires-python = ">=3.10"
+dependencies = [
+    # haxney base (UI server + routing/weather/sector engine)
+    "matplotlib",
+    "numpy",
+    "cartopy",
+    "shapely",
+    "pillow",
+    "flask",
+    # additional advisory features ported from the FastAPI version
+    "anthropic",        # AI briefing (briefing.py); needs ANTHROPIC_API_KEY
+    "requests",         # historical METAR + winds (metar.py, winds.py)
+    "python-dotenv",    # .env loading (app/core/config.py)
+]
+
+[project.optional-dependencies]
+# Optional, more accurate per-aircraft fuel burn. fuel.py falls back to a
+# lookup table when this is not installed.
+fuel = ["openap"]
+
+[project.scripts]
+dont_crash = "dont_crash:main"
+
+[tool.setuptools]
+py-modules = ["dont_crash", "webapp"]
+packages = ["app", "app.core", "app.services"]
+
+[tool.setuptools.package-dir]
+app = "backend/app"

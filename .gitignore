@@ -44,3 +44,6 @@ Thumbs.db
 # Playwright
 test-results/
 playwright-report/
+
+# also ignore the bundle when present as a symlink
+hackathon_data_bundle
